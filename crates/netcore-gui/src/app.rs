@@ -21,10 +21,13 @@ use tokio::sync::mpsc::UnboundedSender;
 use crate::client::{self, Request, UiEvent};
 
 const CSS: &str = "
-.netcore-hero { padding: 18px; }
-.netcore-device { padding: 14px; }
-.netcore-network-row { padding: 10px 12px; border-radius: 10px; }
-.netcore-banner { padding: 10px 12px; }
+.netcore-hero { padding: 10px 14px; }
+.netcore-device { padding: 4px 8px; border-radius: 8px; }
+.netcore-network-row { padding: 2px 6px; border-radius: 6px; min-height: 0; }
+.netcore-section-title { font-size: 13px; font-weight: bold; }
+.netcore-network-ssid { font-weight: 500; }
+.netcore-current { background-color: alpha(#2ec27e, 0.10); }
+.netcore-banner { padding: 6px 10px; }
 .netcore-banner-error { background-color: alpha(#e01b24, 0.16); }
 .netcore-banner-success { background-color: alpha(#2ec27e, 0.18); }
 ";
@@ -41,13 +44,13 @@ struct AppState {
 struct Ui {
     window: ApplicationWindow,
     scrolled: ScrolledWindow,
-    header_subtitle: Label,
     hero_icon: Image,
     hero_title: Label,
     hero_detail: Label,
     hero_spinner: Spinner,
     wifi_switch: gtk::Switch,
     devices_box: GtkBox,
+    wifi_title: Label,
     wifi_box: GtkBox,
     wifi_hint: Label,
     scan_button: Button,
@@ -79,22 +82,14 @@ fn build_window(application: &Application, bus: BusKind) {
     let window = ApplicationWindow::builder()
         .application(application)
         .title("网络")
-        .default_width(880)
-        .default_height(780)
+        .default_width(760)
+        .default_height(700)
         .build();
 
     let header = HeaderBar::new();
-    let title_box = GtkBox::new(Orientation::Vertical, 0);
     let title = Label::new(Some("网络"));
     title.add_css_class("title-4");
-    title.set_xalign(0.0);
-    let subtitle = Label::new(Some("正在连接 netcore…"));
-    subtitle.add_css_class("dim-label");
-    subtitle.add_css_class("caption");
-    subtitle.set_xalign(0.0);
-    title_box.append(&title);
-    title_box.append(&subtitle);
-    header.set_title_widget(Some(&title_box));
+    header.set_title_widget(Some(&title));
 
     let refresh_button = icon_button("view-refresh-symbolic", "刷新");
     header.pack_end(&refresh_button);
@@ -104,28 +99,30 @@ fn build_window(application: &Application, bus: BusKind) {
     header.pack_end(&hidden_button);
     window.set_titlebar(Some(&header));
 
-    let content = GtkBox::new(Orientation::Vertical, 14);
-    content.set_margin_top(16);
-    content.set_margin_bottom(16);
-    content.set_margin_start(22);
-    content.set_margin_end(22);
+    let content = GtkBox::new(Orientation::Vertical, 9);
+    content.set_margin_top(10);
+    content.set_margin_bottom(10);
+    content.set_margin_start(14);
+    content.set_margin_end(14);
 
-    let hero = GtkBox::new(Orientation::Horizontal, 16);
+    let hero = GtkBox::new(Orientation::Horizontal, 10);
     hero.add_css_class("card");
     hero.add_css_class("netcore-hero");
     let hero_icon = Image::from_icon_name("network-offline-symbolic");
-    hero_icon.set_pixel_size(46);
+    hero_icon.set_pixel_size(32);
+    hero_icon.set_valign(gtk::Align::Center);
     hero.append(&hero_icon);
-    let hero_text = GtkBox::new(Orientation::Vertical, 3);
+    let hero_text = GtkBox::new(Orientation::Vertical, 0);
     hero_text.set_hexpand(true);
     let hero_title = Label::new(Some("正在连接守护进程…"));
-    hero_title.add_css_class("title-2");
+    hero_title.add_css_class("title-3");
     hero_title.set_xalign(0.0);
     let hero_detail = Label::new(Some("netcore 网络管理器"));
     hero_detail.add_css_class("dim-label");
+    hero_detail.add_css_class("caption");
     hero_detail.set_xalign(0.0);
-    hero_detail.set_wrap(true);
-    hero_detail.set_max_width_chars(60);
+    hero_detail.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    hero_detail.set_max_width_chars(70);
     let hero_spinner = Spinner::new();
     hero_spinner.set_visible(false);
     hero_text.append(&hero_title);
@@ -133,7 +130,7 @@ fn build_window(application: &Application, bus: BusKind) {
     hero_text.append(&hero_spinner);
     hero.append(&hero_text);
 
-    let switch_box = GtkBox::new(Orientation::Vertical, 4);
+    let switch_box = GtkBox::new(Orientation::Horizontal, 5);
     switch_box.set_valign(gtk::Align::Center);
     let wifi_label = Label::new(Some("Wi-Fi"));
     wifi_label.add_css_class("caption");
@@ -148,10 +145,10 @@ fn build_window(application: &Application, bus: BusKind) {
 
     let devices_title = section_label("网络设备");
     content.append(&devices_title);
-    let devices_box = GtkBox::new(Orientation::Vertical, 8);
+    let devices_box = GtkBox::new(Orientation::Vertical, 2);
     content.append(&devices_box);
 
-    let wifi_header = GtkBox::new(Orientation::Horizontal, 8);
+    let wifi_header = GtkBox::new(Orientation::Horizontal, 6);
     let wifi_title = section_label("Wi-Fi 网络");
     wifi_title.set_hexpand(true);
     let scan_button = Button::with_label("扫描");
@@ -163,10 +160,12 @@ fn build_window(application: &Application, bus: BusKind) {
 
     let wifi_hint = Label::new(Some("尚未扫描"));
     wifi_hint.add_css_class("dim-label");
+    wifi_hint.add_css_class("caption");
     wifi_hint.set_xalign(0.0);
     wifi_hint.set_wrap(true);
+    wifi_hint.set_visible(false);
     content.append(&wifi_hint);
-    let wifi_box = GtkBox::new(Orientation::Vertical, 6);
+    let wifi_box = GtkBox::new(Orientation::Vertical, 0);
     content.append(&wifi_box);
 
     let scrolled = ScrolledWindow::builder()
@@ -190,9 +189,9 @@ fn build_window(application: &Application, bus: BusKind) {
     banner.set_transition_type(gtk::RevealerTransitionType::SlideDown);
     banner.set_reveal_child(false);
     banner.set_child(Some(&banner_box));
-    banner.set_margin_start(22);
-    banner.set_margin_end(22);
-    banner.set_margin_bottom(12);
+    banner.set_margin_start(14);
+    banner.set_margin_end(14);
+    banner.set_margin_bottom(8);
 
     let root = GtkBox::new(Orientation::Vertical, 0);
     root.append(&scrolled);
@@ -202,13 +201,13 @@ fn build_window(application: &Application, bus: BusKind) {
     let ui = Rc::new(Ui {
         window: window.clone(),
         scrolled: scrolled.clone(),
-        header_subtitle: subtitle,
         hero_icon,
         hero_title,
         hero_detail,
         hero_spinner,
         wifi_switch: wifi_switch.clone(),
         devices_box,
+        wifi_title: wifi_title.clone(),
         wifi_box,
         wifi_hint,
         scan_button: scan_button.clone(),
@@ -331,14 +330,15 @@ fn handle_event(
             ui.hero_icon.set_icon_name(Some("network-offline-symbolic"));
             ui.hero_title.set_text("守护进程不可用");
             ui.hero_detail.set_text(&message);
-            ui.header_subtitle.set_text("无法连接 netcore");
             ui.wifi_switch.set_sensitive(false);
             ui.scan_button.set_sensitive(false);
             ui.hidden_button.set_sensitive(false);
             ui.scan_button.set_label("扫描");
             clear_box(&ui.devices_box);
             clear_box(&ui.wifi_box);
+            ui.wifi_title.set_text("Wi-Fi 网络");
             ui.wifi_hint.set_text("等待 netcore 守护进程启动…");
+            ui.wifi_hint.set_visible(true);
             show_banner(ui, true, &message);
         }
         UiEvent::Busy(busy) => {
@@ -392,10 +392,6 @@ fn render_snapshot(ui: &Rc<Ui>, state: &Rc<RefCell<AppState>>, snapshot: Manager
     ui.wifi_switch.set_active(snapshot.wifi_enabled);
     state.borrow_mut().updating_switch = false;
 
-    ui.header_subtitle.set_text(&format!(
-        "{} · netcore {} · {}",
-        snapshot.hostname, snapshot.version, snapshot.wpa_backend
-    ));
     ui.hero_icon
         .set_icon_name(Some(hero_icon(&snapshot, &snapshot.devices)));
     ui.hero_title.set_text(snapshot.state.label());
@@ -430,27 +426,34 @@ fn render_snapshot(ui: &Rc<Ui>, state: &Rc<RefCell<AppState>>, snapshot: Manager
         .iter()
         .find(|device| device.kind == DeviceKind::Wifi);
     let Some(wifi_device) = wifi_device else {
+        ui.wifi_title.set_text("Wi-Fi 网络");
         ui.wifi_hint.set_text("没有 Wi-Fi 设备");
+        ui.wifi_hint.set_visible(true);
         return;
     };
     if !snapshot.wifi_available {
+        ui.wifi_title.set_text("Wi-Fi 网络");
         ui.wifi_hint
             .set_text("wpa_supplicant 后端不可用；请检查 wpa_supplicant 服务");
+        ui.wifi_hint.set_visible(true);
         return;
     }
     if !snapshot.wifi_enabled {
+        ui.wifi_title.set_text("Wi-Fi 网络");
         ui.wifi_hint.set_text("Wi-Fi 已禁用");
+        ui.wifi_hint.set_visible(true);
         return;
     }
     if wifi_device.networks.is_empty() {
+        ui.wifi_title.set_text("Wi-Fi 网络");
         ui.wifi_hint
             .set_text("暂无扫描结果，点击“扫描”查找附近网络");
+        ui.wifi_hint.set_visible(true);
         return;
     }
-    ui.wifi_hint.set_text(&format!(
-        "{} 个网络 · 点击网络进行连接",
-        wifi_device.networks.len()
-    ));
+    ui.wifi_title
+        .set_text(&format!("Wi-Fi 网络 · {}", wifi_device.networks.len()));
+    ui.wifi_hint.set_visible(false);
     for network in &wifi_device.networks {
         let row = build_network_row(ui, wifi_device, network, &snapshot);
         ui.wifi_box.append(&row);
@@ -460,31 +463,28 @@ fn render_snapshot(ui: &Rc<Ui>, state: &Rc<RefCell<AppState>>, snapshot: Manager
 }
 
 fn build_device_card(_ui: &Rc<Ui>, device: &NetworkDevice, snapshot: &ManagerSnapshot) -> GtkBox {
-    let card = GtkBox::new(Orientation::Horizontal, 12);
+    let card = GtkBox::new(Orientation::Horizontal, 8);
     card.add_css_class("card");
     card.add_css_class("netcore-device");
+    card.set_tooltip_text(Some(&device_meta(device)));
     let icon = Image::from_icon_name(device_icon(device));
-    icon.set_pixel_size(28);
+    icon.set_pixel_size(20);
     icon.set_valign(gtk::Align::Center);
     card.append(&icon);
 
-    let text = GtkBox::new(Orientation::Vertical, 2);
+    let text = GtkBox::new(Orientation::Vertical, 0);
     text.set_hexpand(true);
+    text.set_valign(gtk::Align::Center);
     let name = Label::new(Some(&device_name(device)));
     name.add_css_class("heading");
     name.set_xalign(0.0);
     let state_text = Label::new(Some(&device_description(device)));
     state_text.add_css_class("dim-label");
+    state_text.add_css_class("caption");
     state_text.set_xalign(0.0);
-    state_text.set_wrap(true);
-    let meta = Label::new(Some(&device_meta(device)));
-    meta.add_css_class("caption");
-    meta.add_css_class("dim-label");
-    meta.set_xalign(0.0);
-    meta.set_wrap(true);
+    state_text.set_ellipsize(gtk::pango::EllipsizeMode::End);
     text.append(&name);
     text.append(&state_text);
-    text.append(&meta);
     card.append(&text);
 
     let action = match device.state {
@@ -531,27 +531,37 @@ fn build_network_row(
     let row = Button::new();
     row.add_css_class("flat");
     row.add_css_class("netcore-network-row");
-    let content = GtkBox::new(Orientation::Horizontal, 10);
+    row.set_tooltip_text(Some(&format!(
+        "{} · {} · {} MHz{}",
+        network.ssid,
+        network.security.label(),
+        network.frequency,
+        network
+            .bssid
+            .as_ref()
+            .map(|bssid| format!(" · {bssid}"))
+            .unwrap_or_default()
+    )));
+    let content = GtkBox::new(Orientation::Horizontal, 7);
     let icon = Image::from_icon_name(signal_icon(network.quality_percent()));
-    icon.set_pixel_size(22);
+    icon.set_pixel_size(18);
     icon.set_valign(gtk::Align::Center);
     content.append(&icon);
-    let text = GtkBox::new(Orientation::Vertical, 1);
-    text.set_hexpand(true);
     let ssid = Label::new(Some(&network.ssid));
     ssid.set_xalign(0.0);
-    ssid.add_css_class("heading");
+    ssid.set_hexpand(true);
+    ssid.set_ellipsize(gtk::pango::EllipsizeMode::End);
+    ssid.add_css_class("netcore-network-ssid");
+    content.append(&ssid);
     let security = Label::new(Some(if network.security == Security::Open {
-        "开放网络"
+        "开放"
     } else {
         network.security.label()
     }));
     security.set_xalign(0.0);
     security.add_css_class("caption");
     security.add_css_class("dim-label");
-    text.append(&ssid);
-    text.append(&security);
-    content.append(&text);
+    content.append(&security);
     let percent = Label::new(Some(&format!("{}%", network.quality_percent())));
     percent.add_css_class("caption");
     percent.add_css_class("dim-label");
@@ -562,10 +572,12 @@ fn build_network_row(
         badge.add_css_class("caption");
         badge.add_css_class("success");
         content.append(&badge);
-        row.set_sensitive(false);
+        row.add_css_class("netcore-current");
+        row.set_can_target(false);
+        row.set_can_focus(false);
     } else if network.security != Security::Open {
         let lock = Image::from_icon_name("changes-prevent-symbolic");
-        lock.set_pixel_size(14);
+        lock.set_pixel_size(12);
         content.append(&lock);
     }
     row.set_child(Some(&content));
@@ -738,7 +750,7 @@ fn clear_box(container: &GtkBox) {
 
 fn section_label(text: &str) -> Label {
     let label = Label::new(Some(text));
-    label.add_css_class("title-4");
+    label.add_css_class("netcore-section-title");
     label.set_xalign(0.0);
     label
 }
@@ -746,9 +758,10 @@ fn section_label(text: &str) -> Label {
 fn muted_label(text: &str) -> Label {
     let label = Label::new(Some(text));
     label.add_css_class("dim-label");
+    label.add_css_class("caption");
     label.set_xalign(0.0);
-    label.set_margin_top(4);
-    label.set_margin_bottom(4);
+    label.set_margin_top(2);
+    label.set_margin_bottom(2);
     label
 }
 
