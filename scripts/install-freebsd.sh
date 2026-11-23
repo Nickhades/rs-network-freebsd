@@ -316,8 +316,10 @@ check_artifact_set() {
     fi
 }
 
-detect_core_env
-detect_kde_env
+if [ "$MODE" != binary ]; then
+    detect_core_env
+    detect_kde_env
+fi
 check_prebuilt_core || true
 
 if [ "$CHECK_ONLY" = yes ]; then
@@ -325,6 +327,9 @@ if [ "$CHECK_ONLY" = yes ]; then
     printf '  安装前缀: %s\n' "$PREFIX"
     printf '  暂存根目录: %s\n' "${DESTDIR:-（未设置，直接安装）}"
     printf '  Cargo 目标目录: %s\n' "$TARGET_DIR"
+    if [ "$MODE" = binary ]; then
+        printf '%s\n' "  编译环境: 预编译模式，跳过检测"
+    else
     if [ "$CORE_BUILDABLE" = yes ]; then
         printf '%s\n' "  Rust/GTK 编译环境: 完整"
     else
@@ -334,6 +339,7 @@ if [ "$CHECK_ONLY" = yes ]; then
         printf '%s\n' "  KDE 构建环境: 完整"
     else
         printf '%s\n' "  KDE 构建环境: 不完整（$MISSING_KDE）"
+    fi
     fi
     if [ -z "$PREBUILT_MISSING" ]; then
         printf '%s\n' "  预编译核心产物: 完整"
@@ -383,11 +389,9 @@ fi
 
 case "$MODE" in
     source)
-        detect_core_env
         if [ "$CORE_BUILDABLE" != yes ]; then
             die "编译环境不完整，缺少:$MISSING_CORE"
         fi
-        detect_kde_env
         build_core
         build_kde
         ;;
