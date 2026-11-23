@@ -1,0 +1,10 @@
+[Xfce Panel]
+Type=X-XFCE-PanelPlugin
+Name=netcore Network
+Name[zh_CN]=netcore 网络
+Description=Native FreeBSD network manager panel plugin
+Description[zh_CN]=FreeBSD 原生网络管理器面板插件
+Icon=network-wireless
+X-XFCE-Module=libnetcore_xfce_plugin.so
+X-XFCE-Internal=TRUE
+X-XFCE-API=2.0

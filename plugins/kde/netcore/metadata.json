@@ -1,0 +1,22 @@
+{
+    "KPackageStructure": "Plasma/Applet",
+    "KPlugin": {
+        "Authors": [
+            {
+                "Name": "netcore contributors"
+            }
+        ],
+        "Category": "System Information",
+        "Description": "通过 netcore 守护进程管理 Wi-Fi 和网络设备",
+        "Description[en]": "Manage Wi-Fi and network devices via the netcore daemon",
+        "EnabledByDefault": true,
+        "Icon": "network-wireless",
+        "Id": "org.netcore.networkmanager",
+        "License": "BSD-2-Clause",
+        "Name": "netcore 网络管理器",
+        "Name[en]": "netcore Network Manager",
+        "Version": "0.1.0"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "X-Plasma-MainScript": "ui/main.qml"
+}

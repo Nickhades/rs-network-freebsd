@@ -1,0 +1,78 @@
+import QtQuick.tooling 1.2
+
+// This file describes the plugin-supplied types contained in the library.
+// It is used for QML tooling purposes only.
+Module {
+    Component {
+        name: "NetcoreBackend"
+        prototype: "QObject"
+        exports: ["Netcore.Backend/NetcoreBackend 1.0"]
+        exportMetaObjectRevisions: [256]
+
+        Property { name: "snapshot"; type: "QVariantMap"; read: "snapshot"; notify: "snapshotChanged" }
+        Property { name: "devices"; type: "QVariantList"; read: "devices"; notify: "snapshotChanged" }
+        Property { name: "wifiDevices"; type: "QVariantList"; read: "wifiDevices"; notify: "snapshotChanged" }
+        Property { name: "wifiNetworks"; type: "QVariantList"; read: "wifiNetworks"; notify: "snapshotChanged" }
+        Property { name: "wifiDevice"; type: "string"; read: "wifiDevice"; write: "setWifiDevice"; notify: "wifiDeviceChanged" }
+        Property { name: "hasWifiDevice"; type: "bool"; read: "hasWifiDevice"; notify: "snapshotChanged" }
+
+        Property { name: "daemonAvailable"; type: "bool"; read: "daemonAvailable"; notify: "daemonAvailableChanged" }
+        Property { name: "busy"; type: "bool"; read: "busy"; notify: "busyChanged" }
+        Property { name: "lastError"; type: "string"; read: "lastError"; notify: "lastErrorChanged" }
+
+        Property { name: "state"; type: "string"; read: "state"; notify: "snapshotChanged" }
+        Property { name: "stateLabel"; type: "string"; read: "stateLabel"; notify: "snapshotChanged" }
+        Property { name: "connectivityLabel"; type: "string"; read: "connectivityLabel"; notify: "snapshotChanged" }
+        Property { name: "activeDevice"; type: "string"; read: "activeDevice"; notify: "snapshotChanged" }
+        Property { name: "activeKind"; type: "string"; read: "activeKind"; notify: "snapshotChanged" }
+        Property { name: "activeName"; type: "string"; read: "activeName"; notify: "snapshotChanged" }
+        Property { name: "activeSsid"; type: "string"; read: "activeSsid"; notify: "snapshotChanged" }
+        Property { name: "activeIpv4"; type: "string"; read: "activeIpv4"; notify: "snapshotChanged" }
+        Property { name: "hostname"; type: "string"; read: "hostname"; notify: "snapshotChanged" }
+        Property { name: "daemonVersion"; type: "string"; read: "daemonVersion"; notify: "snapshotChanged" }
+        Property { name: "wpaBackend"; type: "string"; read: "wpaBackend"; notify: "snapshotChanged" }
+        Property { name: "netlinkActive"; type: "bool"; read: "netlinkActive"; notify: "snapshotChanged" }
+        Property { name: "wifiEnabled"; type: "bool"; read: "wifiEnabled"; notify: "snapshotChanged" }
+        Property { name: "wifiAvailable"; type: "bool"; read: "wifiAvailable"; notify: "snapshotChanged" }
+
+        Property { name: "compactIcon"; type: "string"; read: "compactIcon"; notify: "summaryChanged" }
+        Property { name: "toolTipTitle"; type: "string"; read: "toolTipTitle"; notify: "summaryChanged" }
+        Property { name: "toolTipSubText"; type: "string"; read: "toolTipSubText"; notify: "summaryChanged" }
+
+        Signal { name: "snapshotChanged" }
+        Signal { name: "wifiDeviceChanged" }
+        Signal { name: "daemonAvailableChanged" }
+        Signal { name: "busyChanged" }
+        Signal { name: "lastErrorChanged" }
+        Signal { name: "summaryChanged" }
+
+        Method { name: "refresh" }
+        Method { name: "scan" }
+        Method {
+            name: "connectWifi"
+            Parameter { name: "ifname"; type: "string" }
+            Parameter { name: "ssid"; type: "string" }
+            Parameter { name: "password"; type: "string" }
+            Parameter { name: "hidden"; type: "bool" }
+        }
+        Method {
+            name: "disconnectDevice"
+            Parameter { name: "ifname"; type: "string" }
+        }
+        Method {
+            name: "setDeviceEnabled"
+            Parameter { name: "ifname"; type: "string" }
+            Parameter { name: "enabled"; type: "bool" }
+        }
+        Method {
+            name: "setWifiEnabled"
+            Parameter { name: "enabled"; type: "bool" }
+        }
+        Method { name: "openGui" }
+        Method { name: "clearError" }
+        Method {
+            name: "setWifiDevice"
+            Parameter { name: "ifname"; type: "string" }
+        }
+    }
+}

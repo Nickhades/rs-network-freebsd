@@ -1,0 +1,71 @@
+/* netcore GNOME Shell extension styles.
+ *
+ * Layout-only rules; colours are inherited from the active Shell theme where
+ * possible so both the dark and light variants remain legible.
+ */
+
+.netcore-status-title {
+    font-weight: bold;
+}
+
+.netcore-status-detail {
+    font-size: 0.9em;
+}
+
+.netcore-notice {
+    font-size: 0.9em;
+}
+
+.netcore-notice-error {
+    color: #ff7800;
+}
+
+.netcore-network-item,
+.netcore-device-item {
+    padding-top: 6px;
+    padding-bottom: 6px;
+}
+
+.netcore-network-title,
+.netcore-device-title {
+    font-weight: bold;
+    font-size: 0.95em;
+}
+
+.netcore-network-meta,
+.netcore-device-meta {
+    font-size: 0.85em;
+}
+
+.netcore-action-label {
+    font-weight: bold;
+    font-size: 0.9em;
+    padding-left: 12px;
+}
+
+.netcore-tooltip {
+    max-width: 28em;
+}
+
+.netcore-password-box {
+    spacing: 8px;
+    width: 24em;
+}
+
+.netcore-dialog-title {
+    font-weight: bold;
+    font-size: 1.05em;
+}
+
+.netcore-dialog-meta {
+    font-size: 0.9em;
+}
+
+.netcore-dialog-error {
+    color: #ff7800;
+    font-size: 0.9em;
+}
+
+.netcore-password-entry {
+    width: 24em;
+}

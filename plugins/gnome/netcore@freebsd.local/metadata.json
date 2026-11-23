@@ -1,0 +1,7 @@
+{
+  "uuid": "netcore@freebsd.local",
+  "name": "netcore Network Manager",
+  "description": "FreeBSD 原生网络管理器 netcore 的 GNOME Shell 面板指示器：通过 org.netcore.NetworkManager 系统 D-Bus 接口显示连接状态、扫描和连接 Wi-Fi，并管理网络设备。",
+  "shell-version": ["45", "46", "47", "48"],
+  "version": 1
+}

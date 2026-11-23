@@ -1,0 +1,53 @@
+#!/bin/sh
+
+# PROVIDE: netcore
+# REQUIRE: dbus
+# BEFORE: LOGIN
+# KEYWORD: shutdown
+
+# Add the following to /etc/rc.conf:
+#   netcore_enable="YES"
+#
+# Optional:
+#   netcore_flags="--log netcore_daemon=debug"
+#   netcore_logfile="/var/log/netcore.log"
+
+. /etc/rc.subr
+
+name="netcore"
+rcvar="netcore_enable"
+desc="Native FreeBSD network manager"
+
+load_rc_config "${name}"
+
+: ${netcore_enable:="NO"}
+: ${netcore_logfile:="/var/log/netcore.log"}
+: ${netcore_flags:=""}
+
+procname="/usr/local/sbin/netcore-daemon"
+pidfile="/var/run/netcore.pid"
+required_files="${procname}"
+
+# daemon(8) detaches, writes the child pid and captures both output streams.
+# Do not pass -f here: rc.subr would block on start.
+command="/usr/sbin/daemon"
+command_args="-p ${pidfile} -o ${netcore_logfile} ${procname} --bus system ${netcore_flags}"
+start_precmd="netcore_prestart"
+start_postcmd="netcore_postcmd"
+
+netcore_prestart()
+{
+    install -d -o root -g wheel -m 755 /var/run
+    touch "${netcore_logfile}"
+    chmod 640 "${netcore_logfile}"
+    return 0
+}
+
+# daemon(8) creates the pidfile 0600; make status work for wheel users.
+netcore_poststart()
+{
+    [ -f "${pidfile}" ] && chmod 0644 "${pidfile}" 2>/dev/null
+    return 0
+}
+
+run_rc_command "$1"

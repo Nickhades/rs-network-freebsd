@@ -1,0 +1,4 @@
+module Netcore.Backend
+plugin netcorebackendplugin
+classname NetcorePlugin
+typeinfo netcorebackend.qmltypes

@@ -1,0 +1,4 @@
+[D-BUS Service]
+Name=org.netcore.NetworkManager
+Exec=/usr/local/sbin/netcore-daemon --bus system
+User=root
