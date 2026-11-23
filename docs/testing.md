@@ -42,6 +42,20 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 完整 DESTDIR 安装已执行，pkg-plist 中 27 个路径全部存在，GNOME JSON、
   KDE metadata、rc.d 语法与 XML 配置校验通过。
 
+## 安装脚本验证
+
+两种安装入口均在 FreeBSD 15.1 上以 DESTDIR 暂存方式验证：
+
+- 自动模式：检测到 Rust/GTK 与 Qt6 环境，执行
+  cargo build --release --workspace --locked，构建 KDE 插件，安装成功。
+- 预编译模式：在 PATH=/usr/bin:/bin（无 cargo、无 qmake、无 cc）下运行，
+  日志中没有编译调用，文件校验和与 target/release 产物一致。
+- 自动回退：在无编译环境的 PATH 下运行 auto，正确检测缺失依赖并使用预编译
+  产物完成安装。
+- 强制源码模式：同一无编译环境下正确失败，且没有留下部分安装。
+- --check 输出编译环境、KDE 环境、预编译产物状态和自动模式决策。
+- 模式参数冲突会报错，预编译 wrapper 不会启动编译。
+
 ## 桌面扩展验证
 
 GNOME（由扩展实现代理使用私有 D-Bus mock 验证）：

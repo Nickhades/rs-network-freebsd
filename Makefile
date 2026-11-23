@@ -1,8 +1,9 @@
 CARGO?=cargo
 PREFIX?=/usr/local
 DESTDIR?=
+INSTALL_ARGS?=
 
-.PHONY: all build release test check fmt clippy install stage clean
+.PHONY: all build release test check fmt clippy install install-auto install-source install-prebuilt install-check stage stage-auto stage-prebuilt clean
 
 all: build
 
@@ -25,11 +26,28 @@ check:
 clippy:
 	$(CARGO) clippy --workspace --all-targets -- -D warnings
 
-install:
-	./scripts/install-freebsd.sh
+# Auto: build when the toolchain is available, otherwise use prebuilt artifacts.
+install: install-auto
 
-stage:
-	DESTDIR=$(DESTDIR) PREFIX=$(PREFIX) ./scripts/install-freebsd.sh
+install-auto:
+	./scripts/install-freebsd.sh --auto $(INSTALL_ARGS)
+
+install-source:
+	./scripts/install-freebsd.sh --source $(INSTALL_ARGS)
+
+install-prebuilt:
+	./scripts/install-freebsd-prebuilt.sh $(INSTALL_ARGS)
+
+install-check:
+	./scripts/install-freebsd.sh --check
+
+stage: stage-auto
+
+stage-auto:
+	DESTDIR=$(DESTDIR) PREFIX=$(PREFIX) ./scripts/install-freebsd.sh --auto $(INSTALL_ARGS)
+
+stage-prebuilt:
+	DESTDIR=$(DESTDIR) PREFIX=$(PREFIX) ./scripts/install-freebsd-prebuilt.sh $(INSTALL_ARGS)
 
 clean:
 	$(CARGO) clean

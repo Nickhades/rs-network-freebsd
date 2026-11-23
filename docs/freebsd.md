@@ -1,5 +1,15 @@
 # FreeBSD 技术细节与取舍
 
+## 安装入口
+
+netcore 提供自动与预编译两种一键安装方式：
+- scripts/install-freebsd.sh：检测 Rust/GTK 编译环境；完整则自动编译，
+  不完整时回退到 target/release 已有产物。
+- scripts/install-freebsd-prebuilt.sh：只安装预编译产物，不调用任何编译器。
+
+KDE 构建是可选的；Qt6 环境缺失时会跳过构建（如有预编译插件则尝试使用），
+核心组件照常安装。详细决策逻辑、DESTDIR/PREFIX 用法见 docs/installation.md。
+
 ## NETLINK_ROUTE
 
 FreeBSD 13.2 引入 rtnetlink，15.1 的 AF_NETLINK 值为 38，NETLINK_ROUTE 为 0。

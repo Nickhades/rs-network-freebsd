@@ -35,18 +35,31 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 依赖（FreeBSD ports）：
 
-    pkg install rust pkgconf gtk4 xfce4-panel dbus polkit
-    # KDE 集成额外需要：pkg install qt6-base qt6-declarative qt6-tools
+    pkg install gtk4 xfce4-panel dbus polkit
+    # 自动编译还需要：
+    pkg install rust pkgconf
+    # KDE 集成额外需要：
+    pkg install qt6-base qt6-declarative qt6-tools
     # dhclient(8) 与 wpa_supplicant 属于 FreeBSD 基本系统
 
-构建：
+安装有两种一键入口：
 
-    cargo build --release --workspace
-    cargo test --workspace
-    ./scripts/install-freebsd.sh
+    # 1) 自动模式：检测编译环境。完整则自动编译，否则回退到预编译产物。
+    sudo ./scripts/install-freebsd.sh
 
-安装脚本会构建并安装守护进程、CLI、GTK4 界面、XFCE 插件，以及
-rc.d、D-Bus 与 polkit 配置。然后：
+    # 2) 预编译模式：只安装 target/release 已有产物，不调用编译器。
+    sudo ./scripts/install-freebsd-prebuilt.sh
+
+    # 只检测环境与产物，不编译、不安装：
+    ./scripts/install-freebsd.sh --check
+
+自动模式会检测 cargo、rustc、C 编译器、pkg-config、GTK4、GTK3 和
+libxfce4panel；Qt6 可用时同时构建 KDE 插件。编译环境不完整但
+target/release 四个核心产物齐全时，会自动改用预编译安装；两者都没有时
+打印缺失清单并退出。预编译模式要求当前 checkout 已编译过，缺少 KDE 插件
+时会跳过 KDE，但不会启动任何编译命令。
+
+安装后：
 
     sysrc netcore_enable=YES
     service dbus restart
@@ -54,8 +67,13 @@ rc.d、D-Bus 与 polkit 配置。然后：
     service netcore status
     netcore status
 
+暂存安装：
+
+    DESTDIR=/tmp/netcore-stage ./scripts/install-freebsd.sh
+
 注意：服务文件按 /usr/local 前缀编写。安装到其他 PREFIX 时需要相应修改
-D-Bus service 与 .desktop 的 Exec 路径。
+D-Bus service 与 .desktop 的 Exec 路径。完整说明见
+[docs/installation.md](docs/installation.md)。
 
 ## 开发会话（不需要 root 安装）
 
@@ -153,7 +171,9 @@ NotAuthorized。适合开发 GUI/插件：
     plugins/gnome             GNOME Shell 扩展
     plugins/kde               KDE Plasma 6 小部件
     packaging/freebsd         rc.d、D-Bus、polkit、port 骨架
+    docs/installation.md      两种安装模式与故障排查
     scripts/install-freebsd.sh
+    scripts/install-freebsd-prebuilt.sh
 
 ## 测试
 
