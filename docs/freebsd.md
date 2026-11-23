@@ -112,7 +112,7 @@ netcore.rc 使用 daemon(8) 托管：
 
 ## 构建依赖
 
-- Rust 1.89+（实际验证 1.98.1）
+- Rust 1.95+（实际验证 1.98.1；xfce-panel 绑定要求 1.95）
 - FreeBSD 15.1
 - pkg-config
 - GTK4 开发文件（GUI）

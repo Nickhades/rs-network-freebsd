@@ -301,6 +301,7 @@ fn handle_event(
     match event {
         UiEvent::Connecting => {
             state.borrow_mut().daemon_available = false;
+            state.borrow_mut().last_key = None;
             ui.hero_spinner.set_visible(true);
             ui.hero_spinner.start();
             ui.hero_title.set_text("正在连接守护进程…");
@@ -316,6 +317,8 @@ fn handle_event(
             ui.scan_button.set_label("扫描");
             ui.scan_button.set_sensitive(snapshot.wifi_available);
             ui.hidden_button.set_sensitive(true);
+            ui.wifi_switch
+                .set_sensitive(snapshot.wifi_available && snapshot.wpa_backend != "unavailable");
             render_snapshot(ui, state, *snapshot);
         }
         UiEvent::DaemonUnavailable(message) => {
@@ -358,6 +361,13 @@ fn handle_event(
             state.borrow_mut().scanning = false;
             ui.scan_button.set_sensitive(true);
             ui.scan_button.set_label("扫描");
+            // A failed action can leave the widgets ahead of the daemon (for
+            // example a Wi-Fi switch that was toggled). Re-render the last
+            // snapshot unconditionally so the UI reflects reality again.
+            if let Some(snapshot) = state.borrow().snapshot.clone() {
+                state.borrow_mut().last_key = None;
+                render_snapshot(ui, state, snapshot);
+            }
             show_banner(ui, true, &message);
         }
     }

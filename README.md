@@ -35,7 +35,9 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 依赖（FreeBSD ports）：
 
-    pkg install rust gtk4 libxfce4panel dbus wpa_supplicant
+    pkg install rust pkgconf gtk4 xfce4-panel dbus polkit
+    # KDE 集成额外需要：pkg install qt6-base qt6-declarative qt6-tools
+    # dhclient(8) 与 wpa_supplicant 属于 FreeBSD 基本系统
 
 构建：
 

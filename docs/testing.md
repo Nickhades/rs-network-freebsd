@@ -10,7 +10,7 @@ GTK4 4.20.4，GNOME Shell 47.10，Plasma 6.7.5，Qt 6.11.2。本机 wlan0
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
 
-结果：format 与 clippy 无警告；25 个单元测试全部通过（common 4、CLI 2、
+结果：format 与 clippy 无警告；24 个单元测试全部通过（common 3、CLI 2、
 daemon 19）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
 Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 转义、DHCP 状态、CLI 目标选择。
