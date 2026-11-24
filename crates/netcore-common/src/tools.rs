@@ -1,6 +1,6 @@
 //! Runtime discovery for FreeBSD base/ports tools and directories.
 //!
-//! Distribution images differ in whether wpa_supplicant/dhclient live in
+//! Distribution images differ in whether wpa_supplicant/dhcpcd live in
 //! /sbin, /usr/sbin, or /usr/local/sbin. Explicit flags/environment always win;
 //! otherwise we search PATH and a small set of conventional fallbacks.
 
@@ -47,19 +47,6 @@ pub fn ifconfig() -> Option<PathBuf> {
             "/sbin/ifconfig",
             "/usr/sbin/ifconfig",
             "/usr/local/sbin/ifconfig",
-        ],
-    )
-}
-
-#[must_use]
-pub fn dhclient() -> Option<PathBuf> {
-    find_executable(
-        "dhclient",
-        "DHCLIENT",
-        &[
-            "/sbin/dhclient",
-            "/usr/sbin/dhclient",
-            "/usr/local/sbin/dhclient",
         ],
     )
 }

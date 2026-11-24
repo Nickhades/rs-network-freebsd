@@ -1,5 +1,21 @@
 # Changelog
 
+## v0.3.0
+
+- wpa_supplicant 自动探测改为直接优先连接 D-Bus（fi.w1.wpa_supplicant1），
+  失败后才回退到控制套接字；不再依赖 owner 预检查。
+- D-Bus 扫描等待 PropertiesChanged 的 Scanning，连接等待 State=completed；
+  ctrl 后端继续使用 ATTACH 事件。
+- 移除 dhclient：daemon 只使用 dhcpcd，删除 --dhcp-backend/--dhclient 和
+  DhclientBackend；--dhcpcd 可显式指定路径。
+- dhcpcd 使用 -q -b -C resolv.conf --controlgroup wheel --metric 100，
+  控制 socket/lease 事件驱动。
+- 新增 daemon 级 resolv.conf 写入：BOUND 合并活动接口 DNS，STOPPED/EXPIRED
+  移除对应条目；默认路径 /etc/resolv.conf，可用 --resolv-conf 覆盖。
+- 安装脚本检查 ports 的 wpa_supplicant D-Bus 支持和 dhcpcd；README 增加
+  推荐 rc.conf，避免 ifconfig_wlan0="WPA" 抢占 wpa_supplicant。
+- 路由仍由 dhcpcd 按 metric 管理；daemon 当前不直接调用 route(8)。
+
 ## v0.2.0
 
 - 新增 `DhcpClient` trait、`DhcpEvent` 事件流，以及 dhclient/dhcpcd 双后端。

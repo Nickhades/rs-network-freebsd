@@ -197,16 +197,25 @@ resolve_cargo() {
 
 detect_dhcp_clients() {
     DHCPCD_AVAILABLE=no
-    DHCPCLIENT_AVAILABLE=no
     DHCP_SELECTED=""
     if command -v dhcpcd >/dev/null 2>&1; then
         DHCPCD_AVAILABLE=yes
         DHCP_SELECTED=dhcpcd
     fi
-    if command -v dhclient >/dev/null 2>&1; then
-        DHCPCLIENT_AVAILABLE=yes
-        [ -n "$DHCP_SELECTED" ] || DHCP_SELECTED=dhclient
-    fi
+}
+
+detect_wpa_supplicant() {
+    WPA_DBUS=no
+    WPA_PROGRAM=""
+    for candidate in /usr/local/sbin/wpa_supplicant /usr/sbin/wpa_supplicant; do
+        if [ -x "$candidate" ]; then
+            WPA_PROGRAM="$candidate"
+            if "$candidate" -h 2>&1 | grep -q -- '-u = enable DBus'; then
+                WPA_DBUS=yes
+            fi
+            break
+        fi
+    done
 }
 
 detect_desktops() {
@@ -578,14 +587,20 @@ fi
 
 detect_desktops
 detect_dhcp_clients
+detect_wpa_supplicant
 resolve_desktop_choice
 info "桌面集成选择：$SELECTION_LABEL"
 if [ "$DHCPCD_AVAILABLE" = yes ]; then
-    info "DHCP 客户端：dhcpcd 可用（默认 auto 首选）"
-elif [ "$DHCPCLIENT_AVAILABLE" = yes ]; then
-    info "DHCP 客户端：dhclient 可用；如需 dhcpcd：pkg install dhcpcd"
+    info "DHCP 客户端：dhcpcd"
 else
-    warn "未找到 dhcpcd/dhclient；联网需要先安装其中一个，或启动时使用 --no-dhcp"
+    warn "未找到 dhcpcd；请运行 pkg install dhcpcd，或启动 daemon 时使用 --no-dhcp"
+fi
+if [ "$WPA_DBUS" = yes ]; then
+    info "wpa_supplicant：$WPA_PROGRAM（D-Bus 可用）"
+elif [ -n "$WPA_PROGRAM" ]; then
+    warn "当前 wpa_supplicant 未检测到 D-Bus 支持；建议安装 wpa_supplicant-devel"
+else
+    warn "未找到 wpa_supplicant；请安装 ports 的 wpa_supplicant-devel（D-Bus）"
 fi
 
 if [ "$MODE" != binary ]; then
@@ -603,11 +618,16 @@ if [ "$CHECK_ONLY" = yes ]; then
     printf '  Cargo 目标目录: %s\n' "$TARGET_DIR"
     printf '  桌面集成: %s\n' "$SELECTION_LABEL"
     if [ "$DHCPCD_AVAILABLE" = yes ]; then
-        printf '%s\n' "  DHCP 客户端: dhcpcd（auto 首选）"
-    elif [ "$DHCPCLIENT_AVAILABLE" = yes ]; then
-        printf '%s\n' "  DHCP 客户端: dhclient（未找到 dhcpcd）"
+        printf '%s\n' "  DHCP 客户端: dhcpcd"
     else
-        printf '%s\n' "  DHCP 客户端: 未找到（可安装 dhcpcd 或使用 --no-dhcp）"
+        printf '%s\n' "  DHCP 客户端: 未找到（需要 pkg install dhcpcd，或运行 --no-dhcp）"
+    fi
+    if [ "$WPA_DBUS" = yes ]; then
+        printf '%s\n' "  wpa_supplicant: $WPA_PROGRAM（D-Bus 支持）"
+    elif [ -n "$WPA_PROGRAM" ]; then
+        printf '%s\n' "  wpa_supplicant: $WPA_PROGRAM（未检测到 D-Bus，安装 wpa_supplicant-devel）"
+    else
+        printf '%s\n' "  wpa_supplicant: 未找到"
     fi
     if [ "$MODE" = binary ]; then
         printf '%s\n' "  编译环境: 预编译模式，跳过探测"

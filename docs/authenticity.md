@@ -37,9 +37,9 @@ ifname，不写死 wlan0。
 
 ## 工具与控制目录自动发现
 
---wpa-cli/--dhclient/--ifconfig 未指定时，按以下顺序查找：
+--wpa-cli/--dhcpcd/--ifconfig 未指定时，按以下顺序查找：
 
-1. 对应环境变量（WPA_CLI/DHCLIENT/IFCONFIG）。
+1. 对应环境变量（WPA_CLI/DHCPCD/IFCONFIG）。
 2. PATH。
 3. FreeBSD 常见目录（/sbin、/usr/sbin、/usr/local/sbin 等）。
 
@@ -70,4 +70,4 @@ ssid_hex 是协议 v1 的可选新增字段；旧消费者忽略它，仍可读�
 - 单元测试覆盖 UTF-8 中文、非 UTF-8 字节、首尾空格、制表符、\xNN 解码、
   hex 去重和转义往返。
 - 无线接口分类单元测试使用 radio0 + wireless=true，证明不依赖 wlan 前缀。
-- CLI doctor 输出实际解析到的 ifconfig/dhclient/wpa_cli 路径和真实接口。
+- CLI doctor 输出实际解析到的 ifconfig/dhcpcd/wpa_cli 路径和真实接口。

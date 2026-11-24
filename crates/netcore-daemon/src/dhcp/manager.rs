@@ -58,7 +58,7 @@ impl DhcpManager {
 
     /// Ensure the interface has a lease.  The backend's event stream is the
     /// authority for success; the old interface-address polling remains only
-    /// as the backend-internal lease observation for dhclient/dhcpcd.
+    /// inside the dhcpcd backend.
     pub async fn ensure(&self, ifname: &str, force: bool) -> Result<DhcpOutcome> {
         validate_ifname(ifname)?;
         if !self.enabled {

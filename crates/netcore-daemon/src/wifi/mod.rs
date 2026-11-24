@@ -91,17 +91,18 @@ impl WifiService {
                 },
             },
             WpaChoice::Auto => {
-                if dbus::owner_exists().await {
-                    match dbus::DbusWifi::new().await {
-                        Ok(backend) => {
-                            tracing::info!("wpa_supplicant 后端: D-Bus");
-                            return Self {
-                                backend: Backend::Dbus(backend),
-                            };
-                        }
-                        Err(error) => {
-                            tracing::warn!(%error, "wpa_supplicant D-Bus 可发现但连接失败，尝试控制套接字");
-                        }
+                // D-Bus is always attempted first.  Do not gate this on an
+                // owner lookup: on a ports build the service may already be
+                // starting, and a failed lookup must not hide a usable socket.
+                match dbus::DbusWifi::new().await {
+                    Ok(backend) => {
+                        tracing::info!("wpa_supplicant 后端: D-Bus");
+                        return Self {
+                            backend: Backend::Dbus(backend),
+                        };
+                    }
+                    Err(error) => {
+                        tracing::debug!(%error, "wpa_supplicant D-Bus 不可用，尝试控制套接字");
                     }
                 }
                 if ctrl.usable() {

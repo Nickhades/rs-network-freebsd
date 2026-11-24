@@ -1,6 +1,6 @@
 netcore is a native network manager for FreeBSD. A small root daemon
 manages Wi-Fi association through wpa_supplicant (D-Bus or control socket),
-obtains leases with dhclient, monitors kernel interface and address changes
+obtains leases with dhcpcd, monitors kernel interface and address changes
 through NETLINK_ROUTE, and exposes a versioned D-Bus API. netcore also ships a
 command-line client, a GTK4 desktop application, and panel integrations for
 XFCE, GNOME Shell and KDE Plasma.

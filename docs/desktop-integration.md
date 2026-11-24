@@ -98,4 +98,4 @@ QDBusConnection::asyncCall + QDBusPendingCallWatcher，订阅信号，面板紧�
 - 都通过 D-Bus 错误名区分 ServiceUnknown、NotAuthorized、Timeout 和
   守护进程业务错误。
 - 均不把密码写入磁盘或日志。
-- 面板扩展不直接调用 ifconfig/dhclient，所有特权操作回到守护进程。
+- 面板扩展不直接调用 ifconfig/dhcpcd，所有特权操作回到守护进程。

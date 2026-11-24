@@ -22,17 +22,13 @@ pub struct Config {
     #[arg(long)]
     pub wpa_cli: Option<PathBuf>,
 
-    /// DHCP backend. Auto prefers dhcpcd, then dhclient.
-    #[arg(long, value_enum, default_value_t = DhcpChoice::Auto)]
-    pub dhcp_backend: DhcpChoice,
-
-    /// Path to dhclient. Default = search PATH and common FreeBSD locations.
-    #[arg(long)]
-    pub dhclient: Option<PathBuf>,
-
     /// Path to dhcpcd. Default = search PATH and /usr/local/sbin.
     #[arg(long)]
     pub dhcpcd: Option<PathBuf>,
+
+    /// File written with the active DHCP DNS servers. Default = /etc/resolv.conf.
+    #[arg(long, default_value = "/etc/resolv.conf")]
+    pub resolv_conf: PathBuf,
 
     /// Path to ifconfig. Default = search PATH and common FreeBSD locations.
     #[arg(long)]
@@ -75,13 +71,6 @@ pub struct Config {
 pub enum BusChoice {
     System,
     Session,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]
-pub enum DhcpChoice {
-    Auto,
-    Dhclient,
-    Dhcpcd,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, ValueEnum)]

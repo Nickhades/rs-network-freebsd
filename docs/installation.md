@@ -9,9 +9,14 @@ netcore 提供两种一键安装入口，并在安装前选择要集成的桌面
 
 无论选择哪种模式，核心组件都会安装：守护进程、CLI、GTK4 界面、自绘
 应用图标、rc.d、D-Bus service/policy、polkit 和桌面启动文件。桌面插件
-只安装所选项。运行时 DHCP 客户端：FreeBSD 基本系统自带 dhclient；
-也可以安装 ports 的 dhcpcd，守护进程默认 auto 会优先使用它。安装脚本会
-打印当前检测结果和 pkg install dhcpcd 提示，但不会偷偷安装软件包。
+只安装所选项。运行时依赖 ports 的 D-Bus 版 wpa_supplicant 和 dhcpcd：
+
+    pkg install gtk4 dbus polkit dhcpcd wpa_supplicant-devel
+
+安装脚本会检查 /usr/local/sbin/wpa_supplicant 的 -u/D-Bus 支持和 dhcpcd，
+打印明确提示，但不会偷偷安装软件包。rc.conf 建议见 README 和
+docs/freebsd.md；不要设置 ifconfig_wlan0="WPA"，否则 rc 脚本会抢先启动
+wpa_supplicant。
 
 ## 选择桌面集成
 

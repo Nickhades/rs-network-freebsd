@@ -48,7 +48,7 @@ SSID 会校验长度不超过 32 字节；扫描结果按原始字节保存（ss
 --capsicum 将 NETLINK_ROUTE 套接字与消息解析移到子进程，子进程在完成 socket
 和 bind 后调用 cap_enter(2)。父进程只消费固定的事件标签。限制：
 
-- 主守护进程无法整体进入能力模式，因为需要 fork/exec DHCP 客户端并访问
+- 主守护进程无法整体进入能力模式，因为需要 fork/exec dhcpcd 并访问
   wpa_supplicant/dhcpcd 控制套接字路径。
 - Netlink helper 仍与守护进程同 UID；它是解析器隔离，不是完整沙箱。
 - 后续可用 FreeBSD Casper 的 cap_net/cap_dns 服务拆分特权操作，并把 wpa
@@ -64,23 +64,26 @@ SSID 会校验长度不超过 32 字节；扫描结果按原始字节保存（ss
 
 ## 进程与租约
 
-- dhclient/dhcpcd 子进程位于独立进程组，停止时按组发信号，避免残留特权进程。
-- 只停止自己创建的子进程；对外部 dhclient/dhcpcd 只读取租约，不发送信号。
-- 守护进程收到 SIGTERM/SIGINT 时停止自己的 DHCP 客户端后退出。
-- 若守护进程被 SIGKILL，客户端可能继续续租；重新启动后会通过 pidfile
-  检测并沿用，不会重复启动。
-- dhcpcd 控制 socket 由 root/轮子组限制权限；后端只接受来自固定路径的 socket，
-  并在连接/读取上设置超时。`--controlgroup wheel` 让控制组访问面收窄到 wheel；
-  若目标系统不支持该选项，应显式审计并改用 dhclient 或专门的 netcore 组。
-- DHCP 客户端路径经过 `is_executable` 校验，不拼接 shell；`--dhclient`/
-  `--dhcpcd` 只能指向实际可执行文件，防止 PATH 注入。
-- 路由/DNS 当前由 DHCP 客户端负责；netcore 不解析或重写 `/etc/resolv.conf`，
-  从而避免多接口清理时误删其他客户端的条目。
+- dhcpcd 以 -b 后台运行；停止时优先发送控制 socket terminate，失败后执行
+  dhcpcd -k，并清理自己写入的 DNS 条目。
+- 只停止自己启动的 dhcpcd；对外部（系统全局或按接口）dhcpcd 只读取租约，
+  不发送终止信号，也不改写 DNS。
+- 守护进程收到 SIGTERM/SIGINT 时停止自己的 dhcpcd 并退出。
+- 若守护进程被 SIGKILL，dhcpcd 可能继续续租；重新启动后会通过 pidfile 或
+  控制 socket 检测并沿用，不会重复启动。
+- dhcpcd 控制 socket 由 root/wheel 权限限制；后端只接受固定路径，并在连接
+  和读取上设置超时。`--controlgroup wheel` 让控制组访问面收窄到 wheel；
+  若目标系统不支持该选项，应审计并改用专门的 netcore 组。
+- dhcpcd 路径经过 `is_executable` 校验，不拼接 shell；`--dhcpcd` 只能指向
+  实际可执行文件，防止 PATH 注入。
+- daemon 用活动接口的 DNS 列表原子式重写 `/etc/resolv.conf`，只删除自己
+  记录的接口条目；不会把密码或任意客户端输入写入该文件。路由由 dhcpcd
+  管理，daemon 不直接调用 route(8)。
 
 ## 建议的加固路线
 
 1. 用直接 wpa_ctrl 协议替换 wpa_cli，消除密码 argv 暴露。
-2. 用 Capsicum 预打开 DHCP 客户端和 wpa/dhcpcd 控制 socket，限制 fd 权限。
+2. 用 Capsicum 预打开 dhcpcd 和 wpa/dhcpcd 控制 socket，限制 fd 权限。
 3. 接入 FreeBSD Casper cap_net 完成地址/路由操作，并把 DNS 所有权移入
    daemon。
 4. polkit 集成测试与 action 文件签名/打包。

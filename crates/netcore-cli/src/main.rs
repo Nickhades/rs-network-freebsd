@@ -461,15 +461,23 @@ async fn doctor(client: &Client, bus: BusKind) -> Result<()> {
             "普通用户（只读；修改需要 root 或 polkit）"
         }
     );
+    let dhcpcd = tools::dhcpcd();
     for (label, found) in [
         ("ifconfig", tools::ifconfig()),
-        ("dhclient", tools::dhclient()),
+        ("dhcpcd", dhcpcd.clone()),
         ("wpa_cli", tools::wpa_cli()),
     ] {
         match found {
             Some(path) => println!("  {label}: {}（存在）", path.display()),
             None => println!("  {label}: 未找到"),
         }
+    }
+    if dhcpcd.is_some() {
+        let running = std::path::Path::new("/var/run/dhcpcd/pid").exists();
+        println!(
+            "  dhcpcd 运行状态: {}",
+            if running { "运行中" } else { "未运行" }
+        );
     }
 
     let wifi_ifnames: Vec<&str> = snapshot

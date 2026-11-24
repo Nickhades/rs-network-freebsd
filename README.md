@@ -2,7 +2,7 @@
 
 netcore 是一个面向 FreeBSD 15.1 的原生网络管理器，采用 Rust 2024 编写。
 核心目标是提供与 Linux NetworkManager 类似的使用体验，但使用 FreeBSD 的
-系统原语：wpa_supplicant（D-Bus 或控制套接字）、dhclient(8) 或 dhcpcd(8)、
+系统原语：wpa_supplicant（D-Bus 优先，控制套接字回退）、dhcpcd(8)、
 getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 界面包括：
@@ -37,10 +37,10 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 
 - Wi-Fi 扫描、连接、断开，WPA/WPA2/WPA3-SAE 密码网络
 - wpa_supplicant 自动探测：优先 fi.w1.wpa_supplicant1 D-Bus，缺失时回退
-  到控制套接字；wpa_cli、ifconfig、dhclient、dhcpcd 与控制目录按
-  PATH/环境/实际目录自动发现（FreeBSD ports 构建常常没有 D-Bus 后端）
-- DHCP 后端可切换：`--dhcp-backend auto|dhclient|dhcpcd`，auto 优先 dhcpcd；
-  dhclient 保留给旧系统，外部客户端租约只被沿用、不会被杀死
+  到控制套接字；wpa_cli、ifconfig、dhcpcd 与控制目录按 PATH/环境/实际
+  目录自动发现（推荐 ports 的 wpa_supplicant-devel，D-Bus 优先）
+- 仅使用 dhcpcd；控制 socket 优先，lease/接口地址兜底，外部 dhcpcd 只被
+  沿用、不会被杀死
 - 监听 NETLINK_ROUTE 的链路与地址事件，并保留 getifaddrs 周期轮询兜底
 - 设备状态、IP、MAC、MTU 与 Wi-Fi 信号/安全性统一建模
 - Wi-Fi 接口通过 ifconfig -g wlan 动态识别，不依赖 wlanN 名称
@@ -59,7 +59,7 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 
 依赖（FreeBSD ports）：
 
-    pkg install gtk4 dbus polkit
+    pkg install gtk4 dbus polkit dhcpcd wpa_supplicant-devel
     # 自动编译核心还需要：
     pkg install rust pkgconf
     # 选择 XFCE 集成还需要：
@@ -67,8 +67,8 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
     # 选择 KDE 集成还需要：
     pkg install qt6-base qt6-declarative qt6-tools
     # GNOME Shell 扩展无需编译依赖
-    # dhclient(8) 与 wpa_supplicant 属于 FreeBSD 基本系统
-    # 可选：pkg install dhcpcd（auto 会优先使用 dhcpcd）
+    # 需要 ports 的 wpa_supplicant-devel（带 D-Bus）
+    # dhcpcd 为必需 DHCP 客户端
 
 安装时会先选择要安装的桌面集成：
 
@@ -154,23 +154,35 @@ NotAuthorized。适合开发 GUI/插件：
 
 生产环境绝不要使用 --auth none 或 session 总线。
 
-## DHCP 后端
+## DHCP 与 wpa_supplicant
 
-    # 默认 auto：优先 dhcpcd，否则 dhclient
-    netcore-daemon --dhcp-backend auto
+netcore 只使用 dhcpcd。启动参数：
 
-    # 固定使用 dhcpcd（需要 /usr/local/sbin/dhcpcd 或 --dhcpcd）
-    netcore-daemon --dhcp-backend dhcpcd
+    # 默认
+    netcore-daemon
 
-    # 回退到旧系统 dhclient
-    netcore-daemon --dhcp-backend dhclient
+    # 显式指定 dhcpcd 路径
+    netcore-daemon --dhcpcd /usr/local/sbin/dhcpcd
 
     # 不启动 DHCP，使用静态地址
     netcore-daemon --no-dhcp
 
-两种后端都通过同一套事件抽象向上层报告 BOUND/RENEW/EXPIRED/STOPPED；
-dhclient 使用 lease 文件与接口地址观察，dhcpcd 优先连接控制 socket，
-并在不可用时使用同样的 lease 兜底。
+dhcpcd 以 `-q -b -C resolv.conf --controlgroup wheel --metric 100 <if>` 启动，
+控制 socket 事件优先，lease/接口地址兜底。由于使用 `-C resolv.conf`，
+daemon 在 BOUND 后用活动接口的 DNS 重写 `/etc/resolv.conf`，断开时移除
+对应条目；路由由 dhcpcd 自己管理并在停止时清理。外部 dhcpcd 只沿用其租约，
+不写 DNS、不发送终止信号。
+
+推荐 rc.conf（避免系统 rc 脚本和 daemon 抢 wpa_supplicant）：
+
+    wlans_rtw890="wlan0"
+    create_args_wlan0="country CN"
+    ifconfig_wlan0="up"
+    dhcpcd_enable="NO"          # netcore 按接口管理 dhcpcd
+    wpa_supplicant_program="/usr/local/sbin/wpa_supplicant"
+
+不要设置 `ifconfig_wlan0="WPA"`；daemon 连接时通过 wpa_supplicant D-Bus
+AddNetwork/SelectNetwork 管理关联。
 
 ## CLI
 
@@ -197,7 +209,7 @@ dhclient 使用 lease 文件与接口地址观察，dhcpcd 优先连接控制 so
                                                                    |
                        +----------------------+--------------------+--------------------+
                        |                      |                    |                    |
-              wpa_supplicant        dhclient / dhcpcd       NETLINK_ROUTE       getifaddrs(3)
+              wpa_supplicant        dhcpcd                 NETLINK_ROUTE       getifaddrs(3)
               D-Bus / ctrl socket   per-interface backend   link/addr events    reconcile
                                                                    |
                                                            Capsicum helper (optional)
@@ -241,8 +253,11 @@ dhclient 使用 lease 文件与接口地址观察，dhcpcd 优先连接控制 so
   接口不会猜测原始字节；主 GUI 会阻止这类连接，而不是连到错误名称。
 - 不持久化已保存网络；每次连接把网络临时加入 wpa_supplicant。
 - 不主动探测互联网连通性；connectivity=local 表示已有本地地址。
-- 路由与 DNS 仍由选中的 DHCP 客户端（dhclient 或 dhcpcd）写入；netcore
-  尚未在 daemon 内实现跨接口的路由/DNS 所有权清理。
+- DNS 由 daemon 写入 `/etc/resolv.conf`；路由仍由 dhcpcd 管理。
+- 尚未自动启动/停止 wpa_supplicant；需要系统或管理员先启动 ports 的
+  `wpa_supplicant-devel`。
+- 尚未提供 daemon 级跨接口路由清理；多接口冲突需由 dhcpcd metric 和
+  管理员配置控制。
 - dhcpcd 控制 socket 的 JSON 事件布局在不同版本间不完全一致；没有可用事件
   时会回退到接口地址和 lease 文件观察。
 - FreeBSD rtnetlink 仍在演进，NETLINK_ROUTE 只作为加速路径，轮询兜底

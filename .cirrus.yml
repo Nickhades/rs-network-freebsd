@@ -9,7 +9,7 @@ freebsd_task:
   freebsd_instance:
     image_family: freebsd-15-0
   install_script:
-    - pkg install -y rust pkgconf dbus
+    - pkg install -y rust pkgconf dbus dhcpcd wpa_supplicant-devel
     - rustc --version
   test_script:
     - cargo fmt --all --check

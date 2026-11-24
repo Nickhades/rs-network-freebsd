@@ -24,7 +24,7 @@ use serde_json::Value;
 use super::lease::{LeaseDetails, lease_for_interface};
 use super::{
     DhcpClient, DhcpEvent, Error, EventStream, Shared, dhcpcd_control_paths, dhcpcd_lease_paths,
-    shared_emit, shared_mark_external, shared_reset, shared_subscribe,
+    shared_emit, shared_mark_external, shared_reset, shared_subscribe, write_resolv_conf,
 };
 use crate::system::validate_ifname;
 
@@ -43,14 +43,63 @@ pub(crate) struct DhcpcdBackend {
     dhcpcd: PathBuf,
     shared: Arc<Mutex<Shared>>,
     runtimes: Mutex<HashMap<String, Runtime>>,
+    dns: DnsState,
+}
+
+#[derive(Clone)]
+struct DnsState {
+    path: PathBuf,
+    servers: Arc<Mutex<HashMap<String, Vec<IpAddr>>>>,
+}
+
+impl DnsState {
+    fn new(path: PathBuf) -> Self {
+        Self {
+            path,
+            servers: Arc::new(Mutex::new(HashMap::new())),
+        }
+    }
+
+    /// Update the daemon-owned resolv.conf.  External dhcpcd instances keep
+    /// ownership of DNS, so a false manage flag is a no-op.
+    fn apply(&self, iface: &str, event: &DhcpEvent, manage: bool) {
+        if !manage {
+            return;
+        }
+        let mut servers = self.servers.lock().unwrap_or_else(PoisonError::into_inner);
+        match event {
+            DhcpEvent::Bound { dns, .. } => {
+                if !dns.is_empty() {
+                    servers.insert(iface.to_owned(), dns.clone());
+                }
+            }
+            DhcpEvent::Renew { .. } => {}
+            DhcpEvent::Expired | DhcpEvent::Stopped => {
+                servers.remove(iface);
+            }
+        }
+        let mut merged = Vec::new();
+        let mut seen = std::collections::HashSet::new();
+        for list in servers.values() {
+            for server in list {
+                if seen.insert(*server) {
+                    merged.push(*server);
+                }
+            }
+        }
+        if let Err(error) = write_resolv_conf(&self.path, &merged) {
+            tracing::warn!(path = %self.path.display(), %error, "写入 resolv.conf 失败");
+        }
+    }
 }
 
 impl DhcpcdBackend {
-    pub(crate) fn new(dhcpcd: PathBuf) -> Self {
+    pub(crate) fn new(dhcpcd: PathBuf, resolv_conf: PathBuf) -> Self {
         Self {
             dhcpcd,
             shared: Arc::new(Mutex::new(Shared::new())),
             runtimes: Mutex::new(HashMap::new()),
+            dns: DnsState::new(resolv_conf),
         }
     }
 }
@@ -61,6 +110,11 @@ impl DhcpClient for DhcpcdBackend {
         let mut runtimes = self.runtimes.lock().unwrap_or_else(PoisonError::into_inner);
         if let Some(runtime) = runtimes.get(iface) {
             if runtime.external {
+                return Ok(());
+            }
+            // -b daemonizes, so the launcher having exited is normal.  A live
+            // control socket means the backend is already running.
+            if dhcpcd_control_paths(iface).iter().any(|path| path.exists()) {
                 return Ok(());
             }
             if let Some(child) = &runtime.child {
@@ -88,17 +142,22 @@ impl DhcpClient for DhcpcdBackend {
             Some(self.spawn(iface)?)
         };
         let stop = Arc::new(AtomicBool::new(false));
+        let manage_dns = external.is_none();
         let monitor = spawn_monitor(
             iface.to_owned(),
             child.clone(),
             Arc::clone(&stop),
             Arc::clone(&self.shared),
+            self.dns.clone(),
+            manage_dns,
         );
-        let control = child.as_ref().and_then(|_| {
+        let control = child.as_ref().map(|_| {
             spawn_control_listener(
                 iface.to_owned(),
                 Arc::clone(&stop),
                 Arc::clone(&self.shared),
+                self.dns.clone(),
+                manage_dns,
             )
         });
         runtimes.insert(
@@ -128,10 +187,14 @@ impl DhcpClient for DhcpcdBackend {
         };
         runtime.stop.store(true, Ordering::SeqCst);
         if !runtime.external {
-            send_control(iface, "{\"command\":\"terminate\"}\\n");
+            let socket_stopped = send_control(iface, "{\"command\":\"terminate\"}\\n");
+            if !socket_stopped {
+                release(&self.dhcpcd, iface);
+            }
             if let Some(child) = &runtime.child {
                 terminate(child);
             }
+            self.dns.apply(iface, &DhcpEvent::Stopped, true);
         }
         shared_mark_external(&self.shared, iface, false);
         shared_emit(&self.shared, iface, DhcpEvent::Stopped);
@@ -175,7 +238,9 @@ impl DhcpcdBackend {
         // socket on versions that support it.
         command
             .arg("-q")
-            .arg("-B")
+            .arg("-b")
+            .arg("-C")
+            .arg("resolv.conf")
             .arg("--controlgroup")
             .arg("wheel")
             .arg("--metric")
@@ -191,7 +256,7 @@ impl DhcpcdBackend {
         }
         let mut child = command.spawn().with_context(|| {
             format!(
-                "启动 {} -q -B --controlgroup wheel --metric 100 {iface} 失败",
+                "启动 {} -q -b -C resolv.conf --controlgroup wheel --metric 100 {iface} 失败",
                 self.dhcpcd.display()
             )
         })?;
@@ -219,51 +284,54 @@ fn spawn_monitor(
     child: Option<Arc<Mutex<Child>>>,
     stop: Arc<AtomicBool>,
     shared: Arc<Mutex<Shared>>,
+    dns: DnsState,
+    manage_dns: bool,
 ) -> JoinHandle<()> {
     thread::spawn(move || {
         let mut bound = false;
         let mut last: Option<LeaseDetails> = None;
+        let mut launcher_exit_logged = false;
         loop {
             if stop.load(Ordering::SeqCst) {
                 break;
             }
-            if let Some(child) = &child {
-                let status = child
+            // dhcpcd -b daemonizes; the spawned launcher exiting is normal and
+            // must not be treated as a stopped DHCP client.  The control
+            // socket and the lease are the authority.
+            if !launcher_exit_logged
+                && let Some(child) = &child
+                && let Ok(Some(status)) = child
                     .lock()
                     .unwrap_or_else(PoisonError::into_inner)
-                    .try_wait();
-                match status {
-                    Ok(Some(status)) => {
-                        tracing::warn!(ifname = iface, %status, "dhcpcd 已退出");
-                        shared_emit(&shared, &iface, DhcpEvent::Stopped);
-                        break;
-                    }
-                    Ok(None) => {}
-                    Err(error) => tracing::warn!(ifname = iface, %error, "检查 dhcpcd 状态失败"),
-                }
+                    .try_wait()
+            {
+                tracing::debug!(ifname = iface, %status, "dhcpcd launcher 已退出（后台模式）");
+                launcher_exit_logged = true;
             }
             let lease = lease_for_interface(&iface, &dhcpcd_lease_paths(&iface));
             match lease {
                 Some(lease) => {
                     if !bound {
-                        shared_emit(
-                            &shared,
-                            &iface,
-                            DhcpEvent::Bound {
-                                ip: lease.ip,
-                                subnet: lease.subnet,
-                                gateway: lease.gateway,
-                                dns: lease.dns.clone(),
-                            },
-                        );
+                        let event = DhcpEvent::Bound {
+                            ip: lease.ip,
+                            subnet: lease.subnet,
+                            gateway: lease.gateway,
+                            dns: lease.dns.clone(),
+                        };
+                        dns.apply(&iface, &event, manage_dns);
+                        shared_emit(&shared, &iface, event);
                         bound = true;
                     } else if last.as_ref() != Some(&lease) {
-                        shared_emit(&shared, &iface, DhcpEvent::Renew { ip: lease.ip });
+                        let event = DhcpEvent::Renew { ip: lease.ip };
+                        dns.apply(&iface, &event, manage_dns);
+                        shared_emit(&shared, &iface, event);
                     }
                     last = Some(lease);
                 }
                 None if bound => {
-                    shared_emit(&shared, &iface, DhcpEvent::Expired);
+                    let event = DhcpEvent::Expired;
+                    dns.apply(&iface, &event, manage_dns);
+                    shared_emit(&shared, &iface, event);
                     bound = false;
                     last = None;
                 }
@@ -278,11 +346,23 @@ fn spawn_control_listener(
     iface: String,
     stop: Arc<AtomicBool>,
     shared: Arc<Mutex<Shared>>,
-) -> Option<JoinHandle<()>> {
-    let socket_path = dhcpcd_control_paths(&iface)
-        .into_iter()
-        .find(|path| path.exists())?;
-    Some(thread::spawn(move || {
+    dns: DnsState,
+    manage_dns: bool,
+) -> JoinHandle<()> {
+    thread::spawn(move || {
+        // The backgrounded launcher may take a moment to create the socket.
+        let socket_path = loop {
+            if stop.load(Ordering::SeqCst) {
+                return;
+            }
+            if let Some(path) = dhcpcd_control_paths(&iface)
+                .into_iter()
+                .find(|path| path.exists())
+            {
+                break path;
+            }
+            thread::sleep(Duration::from_millis(100));
+        };
         let local = std::env::temp_dir().join(format!(
             "netcore-dhcpcd-{}-{}.sock",
             std::process::id(),
@@ -313,6 +393,7 @@ fn spawn_control_listener(
                         if let Ok(text) = std::str::from_utf8(line)
                             && let Some(event) = parse_control_event(text)
                         {
+                            dns.apply(&iface, &event, manage_dns);
                             shared_emit(&shared, &iface, event);
                         }
                     }
@@ -329,7 +410,7 @@ fn spawn_control_listener(
             }
         }
         let _ = std::fs::remove_file(&local);
-    }))
+    })
 }
 
 /// Parse one JSON event.  The parser also accepts a plain event name for
@@ -425,12 +506,12 @@ fn parse_subnet(value: &Value) -> Option<u8> {
     Some(u32::from(mask).count_ones() as u8)
 }
 
-fn send_control(iface: &str, payload: &str) {
+fn send_control(iface: &str, payload: &str) -> bool {
     let Some(path) = dhcpcd_control_paths(iface)
         .into_iter()
         .find(|path| path.exists())
     else {
-        return;
+        return false;
     };
     let local = std::env::temp_dir().join(format!(
         "netcore-dhcpcd-stop-{}-{}.sock",
@@ -438,12 +519,43 @@ fn send_control(iface: &str, payload: &str) {
         SOCKET_COUNTER.fetch_add(1, Ordering::Relaxed)
     ));
     let _ = std::fs::remove_file(&local);
+    let mut sent = false;
     if let Ok(socket) = UnixDatagram::bind(&local) {
         if socket.connect(&path).is_ok() {
-            let _ = socket.send(payload.as_bytes());
+            sent = socket.send(payload.as_bytes()).is_ok();
         }
         let _ = std::fs::remove_file(&local);
     }
+    sent
+}
+
+fn release(dhcpcd: &Path, iface: &str) {
+    let mut child = match Command::new(dhcpcd)
+        .arg("-k")
+        .arg(iface)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+    {
+        Ok(child) => child,
+        Err(error) => {
+            tracing::debug!(ifname = iface, %error, "dhcpcd -k 回退失败");
+            return;
+        }
+    };
+    for _ in 0..20 {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => thread::sleep(Duration::from_millis(100)),
+            Err(error) => {
+                tracing::debug!(ifname = iface, %error, "等待 dhcpcd -k 失败");
+                return;
+            }
+        }
+    }
+    tracing::debug!(ifname = iface, "dhcpcd -k 超过 2 秒，强制结束");
+    let _ = child.kill();
+    let _ = child.wait();
 }
 
 fn terminate(child: &Arc<Mutex<Child>>) {
@@ -515,12 +627,18 @@ mod tests {
     #[test]
     fn fake_dhcpcd_emits_bound_and_stops() {
         let path = std::env::temp_dir().join(format!("netcore-fake-dhcpcd-{}", std::process::id()));
-        std::fs::write(&path, "#!/bin/sh\nexec sleep 30\n").unwrap();
+        std::fs::write(
+            &path,
+            "#!/bin/sh\n[ \"$1\" = \"-k\" ] && exit 0\nexec sleep 30\n",
+        )
+        .unwrap();
         let mut permissions = std::fs::metadata(&path).unwrap().permissions();
         permissions.set_mode(0o700);
         std::fs::set_permissions(&path, permissions).unwrap();
 
-        let backend = DhcpcdBackend::new(path.clone());
+        let resolv =
+            std::env::temp_dir().join(format!("netcore-fake-resolv-{}", std::process::id()));
+        let backend = DhcpcdBackend::new(path.clone(), resolv);
         let mut events = backend.subscribe("lo0");
         backend.start("lo0").expect("start fake dhcpcd");
         let (sender, receiver) = std::sync::mpsc::channel();
@@ -532,6 +650,25 @@ mod tests {
             .expect("bound event");
         assert!(matches!(event, Some(DhcpEvent::Bound { .. })));
         backend.stop("lo0").expect("stop fake dhcpcd");
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[test]
+    fn dns_state_writes_and_cleans_up() {
+        let path = std::env::temp_dir().join(format!("netcore-dns-test-{}", std::process::id()));
+        let state = DnsState::new(path.clone());
+        let event = DhcpEvent::Bound {
+            ip: "192.0.2.10".parse().unwrap(),
+            subnet: 24,
+            gateway: "192.0.2.1".parse().unwrap(),
+            dns: vec!["192.0.2.53".parse().unwrap()],
+        };
+        state.apply("wlan0", &event, true);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(text.contains("nameserver 192.0.2.53"));
+        state.apply("wlan0", &DhcpEvent::Stopped, true);
+        let text = std::fs::read_to_string(&path).unwrap();
+        assert!(!text.contains("nameserver"));
         let _ = std::fs::remove_file(path);
     }
 

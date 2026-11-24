@@ -1,8 +1,8 @@
-//! Lossless-enough lease parsing for the two supported DHCP clients.
+//! Lossless-enough lease parsing for dhcpcd.
 //!
-//! dhclient and dhcpcd store leases in different formats.  We only need the
-//! IPv4 address, prefix, router and DNS servers for the event stream; the
-//! kernel remains the authority for the actual address on the interface.
+//! dhcpcd lease observation.  We only need the IPv4 address, prefix, router
+//! and DNS servers for the event stream; the kernel remains the authority for
+//! the actual address on the interface.
 
 use std::net::{IpAddr, Ipv4Addr};
 use std::path::Path;
@@ -52,15 +52,11 @@ pub(crate) fn parse_lease_file(path: &Path) -> Option<LeaseDetails> {
     parse_lease_text(&text)
 }
 
-/// Parse the last lease block in a dhclient file or the key/value lines used
-/// by dhcpcd.  Unknown lines are ignored; malformed values never panic.
+/// Parse the key/value lines used by dhcpcd.  Unknown lines are ignored;
+/// malformed values never panic.
 #[must_use]
 pub(crate) fn parse_lease_text(text: &str) -> Option<LeaseDetails> {
-    let block = text
-        .rsplit("lease {")
-        .next()
-        .filter(|block| block.len() != text.len())
-        .unwrap_or(text);
+    let block = text;
     let mut ip: Option<IpAddr> = None;
     let mut subnet: Option<u8> = None;
     let mut gateway: Option<IpAddr> = None;
@@ -76,26 +72,9 @@ pub(crate) fn parse_lease_text(text: &str) -> Option<LeaseDetails> {
         let (key, value) = (key.trim(), value.trim());
         let value = value.trim_matches('"');
         match key {
-            "fixed-address" | "ip_address" | "ip-address" => {
+            "ip_address" | "ip-address" => {
                 if ip.is_none() {
                     ip = parse_ip(value);
-                }
-            }
-            "option" => {
-                let mut parts = value.splitn(2, ' ');
-                let Some(option) = parts.next() else { continue };
-                let Some(value) = parts.next() else { continue };
-                match option {
-                    "subnet-mask" | "subnet_mask" => {
-                        subnet = parse_mask(value);
-                    }
-                    "routers" | "router" => {
-                        gateway = first_ip(value);
-                    }
-                    "domain-name-servers" | "domain_name_servers" => {
-                        dns = parse_ips(value);
-                    }
-                    _ => {}
                 }
             }
             "subnet_mask" | "subnet-mask" => {
@@ -155,22 +134,6 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parses_dhclient_lease() {
-        let text = r#"lease {
-  interface "wlan0";
-  fixed-address 192.0.2.44;
-  option subnet-mask 255.255.255.0;
-  option routers 192.0.2.1;
-  option domain-name-servers 192.0.2.53, 192.0.2.54;
-}"#;
-        let lease = parse_lease_text(text).expect("lease");
-        assert_eq!(lease.ip, "192.0.2.44".parse::<IpAddr>().unwrap());
-        assert_eq!(lease.subnet, 24);
-        assert_eq!(lease.gateway, "192.0.2.1".parse::<IpAddr>().unwrap());
-        assert_eq!(lease.dns.len(), 2);
-    }
-
-    #[test]
     fn parses_dhcpcd_key_values() {
         let text = "ip_address=198.51.100.7\nsubnet_mask=255.255.255.128\nrouters=198.51.100.1\ndomain_name_servers=198.51.100.53\n";
         let lease = parse_lease_text(text).expect("lease");
@@ -181,6 +144,6 @@ mod tests {
 
     #[test]
     fn rejects_missing_address() {
-        assert!(parse_lease_text("lease { option routers 192.0.2.1; }").is_none());
+        assert!(parse_lease_text("routers=192.0.2.1\n").is_none());
     }
 }

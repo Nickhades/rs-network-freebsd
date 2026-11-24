@@ -2,7 +2,7 @@
 //!
 //! Device state is derived from kernel facts (getifaddrs) plus wpa_supplicant
 //! association state. Operations are serialized so two GUI clicks cannot race
-//! dhclient or wpa_supplicant mutations. Every successful refresh emits one
+//! DHCP or wpa_supplicant mutations. Every successful refresh emits one
 //! deduplicated snapshot, which the D-Bus service fans out as a signal.
 
 use std::collections::{HashMap, HashSet};

@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use clap::Parser;
-use config::{BusChoice, Config, DhcpChoice};
+use config::{BusChoice, Config};
 use manager::Manager;
 use tokio::sync::mpsc;
 use tracing_subscriber::EnvFilter;
@@ -25,9 +25,7 @@ use tracing_subscriber::EnvFilter;
 use crate::auth::Authorizer;
 use crate::dbus::DaemonService;
 use crate::wifi::WifiService;
-use netcore_common::tools::{
-    dhclient, dhcpcd, find_wpa_ctrl_dir, ifconfig, is_executable, wpa_cli,
-};
+use netcore_common::tools::{dhcpcd, find_wpa_ctrl_dir, ifconfig, is_executable, wpa_cli};
 
 fn main() {
     let config = Config::parse();
@@ -78,59 +76,22 @@ fn resolve_tools(config: &mut Config) -> Result<()> {
         bail!("ifconfig 不可执行：{}", ifconfig_path.display());
     }
 
-    let dhcp_path = match config.dhcp_backend {
-        DhcpChoice::Dhcpcd => {
-            config.dhcpcd = Some(
-                config
-                    .dhcpcd
-                    .clone()
-                    .or_else(dhcpcd)
-                    .context("未找到 dhcpcd；请用 --dhcpcd 或 DHCPCD 指定")?,
-            );
-            config.dhcpcd.clone().expect("dhcpcd resolved")
-        }
-        DhcpChoice::Dhclient => {
-            config.dhclient = Some(
-                config
-                    .dhclient
-                    .clone()
-                    .or_else(dhclient)
-                    .context("未找到 dhclient；请用 --dhclient 或 DHCLIENT 指定")?,
-            );
-            config.dhclient.clone().expect("dhclient resolved")
-        }
-        DhcpChoice::Auto => {
-            if let Some(path) = config
-                .dhcpcd
-                .clone()
-                .or_else(dhcpcd)
-                .filter(|path| is_executable(path))
-            {
-                config.dhcp_backend = DhcpChoice::Dhcpcd;
-                config.dhcpcd = Some(path.clone());
-                path
-            } else if let Some(path) = config
-                .dhclient
-                .clone()
-                .or_else(dhclient)
-                .filter(|path| is_executable(path))
-            {
-                config.dhcp_backend = DhcpChoice::Dhclient;
-                config.dhclient = Some(path.clone());
-                path
-            } else {
-                bail!("未找到 DHCP 客户端；请安装 dhcpcd 或 dhclient");
-            }
-        }
-    };
+    config.dhcpcd = Some(
+        config
+            .dhcpcd
+            .clone()
+            .or_else(dhcpcd)
+            .context("未安装 dhcpcd；请运行 pkg install dhcpcd 或用 --dhcpcd 指定")?,
+    );
+    let dhcp_path = config.dhcpcd.clone().expect("dhcpcd resolved");
     if !is_executable(&dhcp_path) {
         bail!("DHCP 客户端不可执行：{}", dhcp_path.display());
     }
 
     tracing::info!(
         ifconfig = %ifconfig_path.display(),
-        dhcp_backend = dhcp::selected_backend(config),
         dhcp = %dhcp_path.display(),
+        resolv_conf = %config.resolv_conf.display(),
         wpa_cli = %config
             .wpa_cli
             .as_ref()

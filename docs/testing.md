@@ -2,7 +2,7 @@
 
 测试环境：FreeBSD 15.1-RELEASE-p7 amd64，Rust 1.98.1，XFCE 4.20.8，
 GTK4 4.20.4，GNOME Shell 47.10，Plasma 6.7.5，Qt 6.11.2。本机 wlan0
-已连接到 WPA2 网络，ue0 由 dhclient 配置。
+已连接到 WPA2 网络，ue0 由 dhcpcd 配置。
 
 ## 自动测试
 
@@ -10,8 +10,8 @@ GTK4 4.20.4，GNOME Shell 47.10，Plasma 6.7.5，Qt 6.11.2。本机 wlan0
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
 
-结果：format 与 clippy 无警告；50 个单元测试全部通过（common 11、CLI 2、
-daemon 34、GUI 3）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
+结果：format 与 clippy 无警告；48 个单元测试全部通过（common 11、CLI 2、
+daemon 32、GUI 3）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
 Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 转义、DHCP 事件/lease/控制 socket JSON、链路状态机、CLI 目标选择、
 SSID 原始字节/hex、工具发现，以及 proptest 生成的任意 SSID 字节往返。
@@ -27,7 +27,7 @@ SSID 原始字节/hex、工具发现，以及 proptest 生成的任意 SSID 字�
 - 成功连接会话 D-Bus，请求名称 org.netcore.NetworkManager。
 - GetSnapshot 返回 wlan0（云涧，192.168.2.226）、ue0（10.83.82.58/59）、
   re0，MAC/MTU/IPv6 正确。
-- 自动探测到 ctrl 后端（本机 wpa_supplicant 没有 D-Bus 服务）。
+- 自动探测顺序为 D-Bus 优先、控制套接字回退。
 - NETLINK_ROUTE 监听启动；Capsicum 模式下 helper 进入能力模式（进程状态
   显示 SC），快照 netlink_active=true。
 - ScanWifi 返回真实网络列表（测试时 8–9 个，随环境变化），SSID 中文解码正确，
@@ -38,7 +38,7 @@ SSID 原始字节/hex、工具发现，以及 proptest 生成的任意 SSID 字�
 - 控制套接字解析保留首尾空格、制表符与非 UTF-8 字节；无效字节以 \xNN
   显示，ssid_hex 保持原始内容，不发生 U+FFFD 替换。
 - 无线接口通过 ifconfig -g wlan 分组识别；单元测试使用 radio0 验证不依赖
-  wlan 前缀。守护进程日志显示实际发现的 ifconfig/dhclient/dhcpcd/wpa_cli 路径。
+  wlan 前缀。守护进程日志显示实际发现的 ifconfig/dhcpcd/wpa_cli 路径。
 - CLI status/list/scan/doctor/monitor 正常；monitor 连续收到初始快照和
   扫描后的 SnapshotChanged。
 - 非 root 修改操作返回 NotAuthorized，未触碰网络。
@@ -56,16 +56,17 @@ SSID 原始字节/hex、工具发现，以及 proptest 生成的任意 SSID 字�
 
 - DhcpClient trait 的 mock 实现验证 Manager 会等待 Bound 事件并拒绝
   Stopped/Expired；事件流在 start 前不丢失 BOUND。
-- 用临时可执行 fake dhclient/dhcpcd 进程验证：进程启动、独立进程组、
-  lo0 地址被识别为 BOUND、stop 只终止自己启动的进程。
-- lease 解析器覆盖 dhclient 的 lease { ... } 和 dhcpcd 的 key=value 格式，
-  subnet mask 转前缀、router 与多个 DNS。
+- 用临时可执行 fake dhcpcd 进程验证：进程启动、后台模式、lo0 地址被识别
+  为 BOUND、stop 只终止自己启动的进程。
+- lease 解析器覆盖 dhcpcd 的 key=value 格式，subnet mask 转前缀、router
+  与多个 DNS。
 - dhcpcd 控制事件解析器覆盖 BOUND/RENEW/EXPIRED/STOPPED JSON 和未知事件。
+- DNS 状态测试验证 BOUND 写入 nameserver，STOPPED 清理对应接口条目。
 - cargo test 包含 proptest：任意 0-32 字节 SSID 的 encode/decode/display
   往返，不出现 U+FFFD。
-- 未在当前开发机上启动第二种真实 DHCP 客户端：系统已有 dhcpcd 在管理
-  wlan0，启动竞争客户端会改变现有网络；两种后端的真实连接测试需在一次性
-  FreeBSD VM 中执行。
+- 未在当前开发机上启动真实 dhcpcd 租约测试：系统已有全局 dhcpcd 在管理
+  wlan0，启动竞争实例会改变现有网络；真实连接测试需在一次性 FreeBSD VM
+  中执行。
 
 ## 安装脚本验证
 
@@ -149,7 +150,7 @@ XFCE（xfce4-panel 4.20.8 + 私有 D-Bus mock）：
 
 以下需要 root 且会改变测试机当前网络，未在开发机上执行：
 
-- 实际 Wi-Fi 断开/连接与 dhclient/dhcpcd 两种后端的 DHCP 租约获取。
+- 实际 Wi-Fi 断开/连接与 dhcpcd 的 DHCP 租约获取。
 - 真实 dhcpcd 控制 socket 的 listen JSON 兼容性（当前实现同时保留 lease
   回退；需在 dhcpcd 版本矩阵上验证）。
 - ifconfig down/up。
@@ -161,10 +162,10 @@ XFCE（xfce4-panel 4.20.8 + 私有 D-Bus mock）：
 相关代码路径已通过单元测试、编译检查和 mock 集成测试；发布前应在一次性
 虚拟机或专用测试机执行完整集成测试。建议步骤：
 
-1. 在测试接口（不要用管理连接的接口）上分别用 --dhcp-backend dhclient 和
-   --dhcp-backend dhcpcd 连接开放网络，验证 BOUND 事件、IP 获取和 DNS。
-2. 断开，确认只杀死 netcore 启动的客户端，外部租约不受影响；检查 dhcpcd
-   控制 socket、lease 回退和路由 metric。
+1. 在测试接口（不要用管理连接的接口）上连接开放网络，验证 BOUND 事件、
+   IP 获取、/etc/resolv.conf 写入和路由 metric。
+2. 断开，确认只终止 netcore 启动的 dhcpcd，外部租约不受影响；检查
+   nameserver 被移除、路由被 dhcpcd 清理、控制 socket 被关闭。
 3. 使用错误密码，验证 35 秒超时、错误上报和网络清理。
 4. 用 wheel 用户和普通用户分别调用 ConnectWifi，验证授权与 polkit。
 5. 安装 D-Bus service 后使用 gdbus call 冷启动守护进程。

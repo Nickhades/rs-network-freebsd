@@ -34,19 +34,6 @@ impl std::fmt::Debug for DbusWifi {
     }
 }
 
-pub async fn owner_exists() -> bool {
-    let Ok(connection) = Connection::system().await else {
-        return false;
-    };
-    let Ok(proxy) = zbus::fdo::DBusProxy::new(&connection).await else {
-        return false;
-    };
-    let Ok(name) = BusName::try_from(DEST) else {
-        return false;
-    };
-    proxy.name_has_owner(name).await.unwrap_or(false)
-}
-
 impl DbusWifi {
     pub async fn new() -> Result<Self> {
         let connection = Connection::system()

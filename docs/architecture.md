@@ -13,7 +13,7 @@
     |   Manager（状态机、操作串行化、快照去重）                       |
     |   WifiService（D-Bus 或 ctrl socket）                          |
     |   LinkState 状态机（Down/Scanning/Authenticating/...）         |
-    |   DhcpClient 后端（dhclient / dhcpcd，统一事件流）              |
+    |   DhcpClient 后端（dhcpcd，统一事件流）                         |
     |   NetlinkMonitor（事件加速；轮询兜底）                         |
     |   Authorizer（root / 组 / polkit）                             |
     +--------------------------------------------------------------+
@@ -52,7 +52,7 @@ updated_at），不会重复广播信号。
       |-- wpa_supplicant AddNetwork + SelectNetwork / wpa_cli
       |-- 等待 wpa_state=completed
       |-- 设置 IpConfig，刷新快照
-      |-- DhcpManager.ensure：启动 dhclient/dhcpcd 并等待事件流 BOUND
+      |-- DhcpManager.ensure：启动 dhcpcd 并等待事件流 BOUND
       |-- 设置 LinkState::Connected，清除操作状态，广播快照
       v
     SnapshotChanged -> 所有前端
@@ -73,9 +73,9 @@ Manager 内的 LinkState 把用户请求和两类底层事件串起来：
 - 连接失败、租约丢失或接口消失会回滚到 `Down`；
 - 断开必须经过 `Disconnecting`，避免状态跳变。
 
-dhclient 没有事件 socket，因此它的后端在内部观察接口地址和 lease 文件；
-dhcpcd 优先使用控制 socket 的 JSON 事件，不可用时使用同样的 lease 兜底。
-这两类观察被封装在 `DhcpClient` 后端内，Manager 只消费 DhcpEvent。
+dhcpcd 优先使用控制 socket 的 JSON 事件；控制 socket 不可用时在内部观察
+接口地址和 lease 文件。这些观察被封装在 DhcpClient 后端内，Manager 只
+消费 DhcpEvent。
 
 ## 并发模型
 
@@ -103,8 +103,8 @@ JSON 文档作为字符串返回，是刻意取舍：
 - crates/netcore-common/src/model.rs：所有共享模型、枚举与 JSON 协议。
 - crates/netcore-daemon/src/manager.rs：状态合成、操作编排、快照去重。
 - crates/netcore-daemon/src/wifi/：wpa_supplicant 双后端及扫描解析。
-- crates/netcore-daemon/src/dhcp/：DhcpClient trait、dhclient/dhcpcd 后端、
-  lease 解析与 BOUND 事件编排。
+- crates/netcore-daemon/src/dhcp/：DhcpClient trait、dhcpcd 后端、lease
+  解析、控制事件与 DNS 编排。
 - crates/netcore-daemon/src/link.rs：统一链路状态机。
 - crates/netcore-daemon/src/netlink.rs：FreeBSD rtnetlink 监听/Capsicum helper。
 - crates/netcore-daemon/src/auth.rs：D-Bus 调用者 UID、组与 polkit 检查。

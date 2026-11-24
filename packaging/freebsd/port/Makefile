@@ -5,7 +5,7 @@
 # GH_ACCOUNT/GH_PROJECT values (or set MASTER_SITES) before building.
 
 PORTNAME=	netcore
-DISTVERSION=	0.1.0
+DISTVERSION=	0.3.0
 CATEGORIES=	net-mgmt
 MASTER_SITES=	# local submission / GH
 PKGNAMESUFFIX=	-network-manager
@@ -24,15 +24,12 @@ USE_QT=		base declarative
 
 LIB_DEPENDS=	libxfce4panel-2.0.so.4:x11-wm/xfce4-panel
 
-# The daemon and CLI use base-system wpa_supplicant/dhclient. dhcpcd is an
-# optional alternative backend; D-Bus is needed at runtime for activation.
-OPTIONS_DEFINE=		DHCPCD
-DHCPCD_DESC=		Install dhcpcd as an optional DHCP backend
-DHCPCD_RUN_DEPENDS=	${LOCALBASE}/sbin/dhcpcd:net/dhcpcd
-RUN_DEPENDS=	${LOCALBASE}/bin/dbus-daemon:devel/dbus
-
-# Keep the prebuilt package usable without the optional backend; users can
-# install net/dhcpcd later and select --dhcp-backend dhcpcd.
+# Runtime needs a D-Bus-capable wpa_supplicant and the dhcpcd backend.
+# wpa_supplicant-devel is a ports package; do not fall back to the base
+# wpa_supplicant, which may lack fi.w1.wpa_supplicant1 D-Bus support.
+RUN_DEPENDS=	${LOCALBASE}/bin/dbus-daemon:devel/dbus \
+		${LOCALBASE}/sbin/dhcpcd:net/dhcpcd \
+		${LOCALBASE}/sbin/wpa_supplicant:security/wpa_supplicant-devel
 
 # Filled from the repository Cargo.lock. Regenerate with:
 #   cargo metadata --format-version 1 | ... (see PORTING.md)

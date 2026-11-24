@@ -40,9 +40,11 @@ netcore 支持两种后端，并在 auto 模式下探测：
    通过 GetInterface(ifname) 获取动态 Interface 对象路径，再调用
    Scan/AddNetwork/SelectNetwork/Disconnect 并读取 State、BSSs、CurrentBSS。
    不使用固定接口对象路径。
+自动探测顺序为 D-Bus 优先，失败后才尝试控制套接字。
+
 2. 控制套接字：自动查找包含控制 socket 的 /var/run/wpa_supplicant* 目录
    （也可用 --wpa-ctrl-dir 或 WPA_CTRL_DIR 指定）。FreeBSD ports 的
-   wpa_supplicant 经常没有编译 D-Bus 支持，此时 netcore 调用 wpa_cli 并解析
+   ports 的 wpa_supplicant-devel 带 D-Bus；基本系统版本可能未编译，此时 netcore 调用 wpa_cli 并解析
    status/scan_results。
 
 连接安全性映射：
@@ -62,103 +64,38 @@ BSS。
 
 ## DHCP
 
-dhclient(8) 由 netcore 用 -d（前台）启动，以便：
+netcore 只使用 dhcpcd(8)。命令形如：
 
-- 精确持有进程并停止；
-- 捕获诊断输出；
-- 避免 dhclient 自己 daemonize 后留下孤儿。
+    dhcpcd -q -b -C resolv.conf --controlgroup wheel --metric 100 <ifname>
 
-命令形如：
+- `-b` 让 dhcpcd 后台化；daemon 通过控制 socket 和 lease 追踪，不持有前台
+  子进程。
+- `-C resolv.conf` 禁止 dhcpcd 修改 DNS；daemon 在 BOUND 后把活动接口的
+  域名服务器合并写入 `/etc/resolv.conf`，断开时移除该接口条目。
+- `--metric 100` 让 dhcpcd 管理路由优先级；停止时 dhcpcd 负责清除自己的
+  路由。
+- 若检测到系统级或按接口的外部 dhcpcd，则沿用其租约，不启动竞争实例，
+  也不改写 DNS。
 
-    dhclient -d -q <ifname>    # 实际路径由工具发现/--dhclient 决定
+控制 socket 优先读取 `/var/run/dhcpcd/<if>.sock`（兼容
+`/var/run/dhcpcd-<if>.sock`），发送 `{"command":"listen"}`。socket
+不可用或事件不是 JSON 时，回退到接口地址和 `/var/db/dhcpcd/*.lease`。
+停止时先发送 `{"command":"terminate"}`，失败则执行 `dhcpcd -k <ifname>`。
 
-进程放入独立进程组；停止时先 SIGTERM 整个组，5 秒后 SIGKILL。若检测到
-/var/run/dhclient/dhclient.<ifname>.pid 指向仍存活的外部 dhclient，则不启动
-第二个客户端，而是沿用现有租约（这兼容 rc.d 的 dhclient 和手工配置）。netcore
-只停止自己启动的进程，不会杀死外部 dhclient。
+启动参数只有：
 
-“是否有地址”以 getifaddrs 为准，而不是 dhclient 的退出码，因为 dhclient 可能
-在前台持续续租。
+    --dhcpcd <path>       # 显式路径；默认自动发现
+    --resolv-conf <path>  # 默认 /etc/resolv.conf，供测试/自定义镜像
+    --no-dhcp             # 静态地址
 
-## DHCP 后端选择
+推荐 rc.conf：
 
-    --dhcp-backend auto      # 默认；优先 dhcpcd，否则 dhclient
-    --dhcp-backend dhcpcd    # 固定 dhcpcd
-    --dhcp-backend dhclient  # 固定 dhclient（旧系统回退）
-    --no-dhcp                # 不启动 DHCP
+    wlans_rtw890="wlan0"
+    create_args_wlan0="country CN"
+    ifconfig_wlan0="up"
+    dhcpcd_enable="NO"
+    wpa_supplicant_program="/usr/local/sbin/wpa_supplicant"
 
-auto 的探测顺序是：显式 `--dhcpcd`/环境变量 DHCPCD → PATH/常见目录中的
-`dhcpcd` → 显式 `--dhclient`/DHCLIENT → `dhclient`。两条后端路径都会先校验
-可执行位；不会通过 shell 或未校验的 PATH 拼接执行。
-
-dhcpcd 后端使用 `-q -B --controlgroup wheel --metric 100`，优先读取
-`/var/run/dhcpcd/<if>.sock`（并兼容 `/var/run/dhcpcd-<if>.sock`）的 JSON 事件；
-控制 socket 不可用时回退到接口地址和 lease。外部 dhcpcd 不会被终止。
-当前 DNS 仍由 dhcpcd/dhclient 自己管理；启动 dhcpcd 时未加 `-C resolv.conf`，
-避免破坏现有 DNS。
-
-## getifaddrs 与 if_data
-
-- AF_LINK 的 ifa_data 指向 if_data，读取 MTU 与运行状态。
-- sockaddr_dl 的 LLADDR(sdl) 等价于 sdl_data + sdl_nlen，代码据此生成 MAC。
-- IPv4/IPv6 前缀由 netmask 的置位数计算。
-- 只展示非 loopback、非已知虚拟接口（bridge、lagg、tun、tap 等），避免面板
-  出现大量内核管道接口。
-
-## D-Bus 与权限
-
-系统总线服务文件让 dbus-daemon 以 root 激活：
-/usr/local/share/dbus-1/system-services/org.netcore.NetworkManager.service。
-
-D-Bus policy 允许所有本地用户向服务发送消息（只读功能需要），但只允许 root
-拥有名称。真正的写权限在守护进程内检查：
-
-1. root；
-2. 调用者 UID 是否属于 --allow-group（默认 wheel）；
-3. polkit action org.netcore.manage（允许交互认证）。
-
-只读方法不触发授权。session 总线只用于开发，不应用于生产。
-
-## Capsicum
-
---capsicum 让 netlink 解析器在子进程中：
-
-1. 打开并绑定 NETLINK_ROUTE；
-2. 调用 cap_enter(2)；
-3. 仅通过已打开的管道/stdout 向父进程发送不可信事件的抽象标签；
-4. 父进程仍负责所有特权网络操作。
-
-这样，最容易被恶意内核/驱动消息影响的解析器处于能力模式，即使被攻破也无法
-打开文件或网络。主守护进程不能整体进入能力模式，因为要 fork/exec DHCP 客户端、
-打开 wpa control socket、读取配置。FreeBSD 提供 libcap_net/cap_net Casper
-服务，可用于进一步把静态地址配置移入受限 helper；当前版本尚未使用。
-
-## rc.d
-
-netcore.rc 使用 daemon(8) 托管：
-
-    /usr/sbin/daemon -p /var/run/netcore.pid -o /var/log/netcore.log \
-        /usr/local/sbin/netcore-daemon --bus system ...
-
-这样原守护进程保持前台（便于信号处理），daemon(8) 负责写 pidfile、重定向日志
-和守护。status/stop 由 rc.subr 使用 pidfile 完成。
-
-## 构建依赖
-
-- Rust 1.95+（实际验证 1.98.1；xfce-panel 绑定要求 1.95）
-- FreeBSD 15.1
-- pkg-config
-- GTK4 开发文件（GUI）
-- libxfce4panel 2.0、GTK3 开发文件（XFCE 插件）
-- dbus、wpa_supplicant、dhclient（基本系统）；dhcpcd（可选，pkg install dhcpcd）
-- polkit（可选，推荐）
-## 接口、工具与 SSID 发现
-
-- 无线接口通过实际的 `ifconfig -g wlan` 组判断，不依赖 wlanN 名称；允许
-  重命名接口。
-- `--wpa-cli`、`--ifconfig`、`--dhclient`、`--dhcpcd` 未指定时依次检查
-  环境变量、PATH 和常见 FreeBSD 目录，不要求工具在 /usr/local 或 /usr/sbin。
-- 控制目录查找实际 socket，不假定只有一个固定目录。
-- SSID 是 32 字节以内的任意八位组；`ssid` 是显示文本，`ssid_hex` 是精确
-  字节。中文 UTF-8 在 C locale 下仍然还原为中文。
-- 详细实现与验证见 docs/authenticity.md。
+不要设置 `ifconfig_wlan0="WPA"`；否则 rc 脚本会抢先启动 wpa_supplicant，
+daemon 只能连接它而无法管理其生命周期。netcore 当前假设 wpa_supplicant 已
+运行，D-Bus 优先，控制套接字回退。
