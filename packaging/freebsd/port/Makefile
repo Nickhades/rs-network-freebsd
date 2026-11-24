@@ -200,6 +200,8 @@ do-install:
 	${INSTALL_DATA} ${WRKSRC}/packaging/freebsd/org.netcore.policy ${STAGEDIR}${PREFIX}/share/polkit-1/actions/
 	${MKDIR} ${STAGEDIR}${PREFIX}/share/applications
 	${INSTALL_DATA} ${WRKSRC}/packaging/freebsd/netcore-gui.desktop ${STAGEDIR}${PREFIX}/share/applications/org.netcore.NetworkManager.Gui.desktop
+	${MKDIR} ${STAGEDIR}${PREFIX}/share/icons/hicolor/scalable/apps
+	${INSTALL_DATA} ${WRKSRC}/packaging/freebsd/org.netcore.NetworkManager.Gui.svg ${STAGEDIR}${PREFIX}/share/icons/hicolor/scalable/apps/
 	${MKDIR} ${STAGEDIR}${PREFIX}/lib/xfce4/panel/plugins
 	${INSTALL_LIB} ${WRKSRC}/target/release/libnetcore_xfce_plugin.so ${STAGEDIR}${PREFIX}/lib/xfce4/panel/plugins/
 	${MKDIR} ${STAGEDIR}${PREFIX}/share/xfce4/panel/plugins

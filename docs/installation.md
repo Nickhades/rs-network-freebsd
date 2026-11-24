@@ -7,8 +7,9 @@ netcore 提供两种一键安装入口，并在安装前选择要集成的桌面
 | scripts/install-freebsd.sh | 自动检测编译环境；可编译则编译，否则尝试预编译产物 | 视环境而定 |
 | scripts/install-freebsd-prebuilt.sh | 只安装已有编译产物，绝不探测或调用编译器 | 不需要 |
 
-无论选择哪种模式，核心组件都会安装：守护进程、CLI、GTK4 界面、rc.d、
-D-Bus service/policy、polkit 和桌面启动文件。桌面插件只安装所选项。
+无论选择哪种模式，核心组件都会安装：守护进程、CLI、GTK4 界面、自绘
+应用图标、rc.d、D-Bus service/policy、polkit 和桌面启动文件。桌面插件
+只安装所选项。
 
 ## 选择桌面集成
 

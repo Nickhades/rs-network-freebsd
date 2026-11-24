@@ -14,9 +14,13 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 - GNOME Shell 扩展（GJS）
 - KDE Plasma 6 小部件（QML/C++）
 
-![netcore GTK4 网络管理器](docs/screenshot-gui.png)
+![netcore GTK4 网络管理器 - 默认深色](docs/screenshot-gui.png)
+
+![netcore GTK4 网络管理器 - 浅色主题](docs/screenshot-gui-light.png)
 
 ![XFCE Panel 插件](docs/screenshot-xfce-panel.png)
+
+界面配色、字体、图标和加速检测说明见 [docs/ui.md](docs/ui.md)。
 
 ## 功能
 
@@ -30,6 +34,10 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 - root + wheel 组 + polkit 三层授权；只读接口对所有本地用户开放
 - 可选 Capsicum：Netlink 解析器运行在 cap_enter(2) 后的子进程中
 - rc.d 服务、D-Bus 激活、polkit action、FreeBSD 安装脚本
+- GTK4 界面固定深色/浅色两套配色，默认深色，不跟随系统桌面主题
+- 自绘 Cairo 图标、窗口控制按钮和应用图标，不依赖系统图标主题
+- 自动识别系统字体族，统一粗体、抗锯齿与文本后处理
+- 启动时检测 DRM GPU；无 GPU 时自动回退 Cairo CPU 渲染，并在界面底部展示
 
 ## 快速开始
 
@@ -107,6 +115,7 @@ NotAuthorized。适合开发 GUI/插件：
     NETCORE_BUS=session ./target/debug/netcore status
     NETCORE_BUS=session ./target/debug/netcore scan
     NETCORE_BUS=session ./target/debug/netcore-gui
+    NETCORE_BUS=session ./target/debug/netcore-gui --theme light
 
 生产环境绝不要使用 --auth none 或 session 总线。
 
@@ -194,6 +203,7 @@ NotAuthorized。适合开发 GUI/插件：
     plugins/kde               KDE Plasma 6 小部件
     packaging/freebsd         rc.d、D-Bus、polkit、port 骨架
     docs/installation.md      两种安装模式与故障排查
+    docs/ui.md                主题、字体、自绘图标与加速检测
     scripts/install-freebsd.sh
     scripts/install-freebsd-prebuilt.sh
 
@@ -207,7 +217,8 @@ NotAuthorized。适合开发 GUI/插件：
 GTK4 界面启动、D-Bus 调用、Wi-Fi 扫描、Netlink 打开与 Capsicum helper
 进入能力模式、XFCE 插件在隔离 Xvfb 面板中加载并显示当前 SSID。GNOME
 扩展与 KDE 插件通过各自的 mock D-Bus 集成测试；桌面选择、交互菜单与
---desktop all 完整 DESTDIR 安装均已验证。详细记录见 docs/testing.md。
+--desktop all 完整 DESTDIR 安装均已验证；GUI 深/浅主题切换与自绘图标已实机截图。
+详细记录见 docs/testing.md。
 
 ## 许可
 

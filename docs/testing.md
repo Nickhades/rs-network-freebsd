@@ -10,8 +10,8 @@ GTK4 4.20.4，GNOME Shell 47.10，Plasma 6.7.5，Qt 6.11.2。本机 wlan0
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
 
-结果：format 与 clippy 无警告；24 个单元测试全部通过（common 3、CLI 2、
-daemon 19）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
+结果：format 与 clippy 无警告；27 个单元测试全部通过（common 3、CLI 2、
+daemon 19、GUI 3）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
 Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 转义、DHCP 状态、CLI 目标选择。
 
@@ -33,13 +33,14 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - CLI status/list/scan/doctor/monitor 正常；monitor 连续收到初始快照和
   扫描后的 SnapshotChanged。
 - 非 root 修改操作返回 NotAuthorized，未触碰网络。
-- GTK4 界面启动，显示设备、IP、网络列表；截图见 docs/screenshot-gui.png。
+- GTK4 界面启动，显示设备、IP、网络列表；深色/浅色截图分别为
+  docs/screenshot-gui.png 和 docs/screenshot-gui-light.png。
 - 最终 release 构建的 netcore-daemon --capsicum 在会话总线启动，helper 进程
   状态为 SC，netlink_active=true。
 - XFCE 插件在隔离 Xvfb + 私有 D-Bus 的临时面板中加载，显示 Wi-Fi 图标和
   当前 SSID “云涧”；日志确认 new item (type=object-type,
   name=netcore-plugin)。截图见 docs/screenshot-xfce-panel.png。
-- 以 --desktop all 执行的完整 DESTDIR 安装通过，pkg-plist 中 27 个路径
+- 以 --desktop all 执行的完整 DESTDIR 安装通过，pkg-plist 中 28 个路径
   全部存在，GNOME JSON、KDE metadata、rc.d 语法与 XML 配置校验通过。
 
 ## 安装脚本验证
@@ -49,11 +50,11 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 桌面菜单：在伪终端中运行，显示 1 XFCE / 2 GNOME / 3 KDE / a / 0，
   输入 3 后只安装 KDE 目录，XFCE 与 GNOME 插件均未安装。
 - 自动模式默认（当前 XFCE）：只构建并安装 XFCE 插件，不安装 GNOME/KDE。
-- --desktop all 自动模式：构建 XFCE 与 KDE 插件，安装全部 27 个 pkg-plist
+- --desktop all 自动模式：构建 XFCE 与 KDE 插件，安装全部 28 个 pkg-plist
   路径。
 - 预编译 --desktop gnome：在无编译调用的前提下只安装 GNOME 扩展，未安装
   XFCE/KDE 文件。
-- 预编译 --desktop all：安装全部组件，27 个 pkg-plist 路径齐全。
+- 预编译 --desktop all：安装全部组件，28 个 pkg-plist 路径齐全。
 - --desktop none：只安装核心组件，三个桌面插件目录都不存在。
 - 预编译模式在 PATH=/usr/bin:/bin（无 cargo、无 qmake、无 cc）下成功，
   日志中没有编译调用，文件校验和与 target/release 产物一致。
@@ -63,6 +64,26 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 强制源码模式在无编译环境下正确失败，且没有留下部分安装。
 - --check 输出所选桌面、编译环境、预编译产物状态和自动模式决策。
 - 模式参数冲突会报错；预编译 wrapper 不能切入源码模式。
+- --desktop all 的 DESTDIR 安装包含自绘应用图标，共 28 个 pkg-plist 路径。
+
+## GUI 主题与自绘界面验证
+
+- 默认 --theme dark 与 --theme light 分别启动成功，文本/背景/卡片/输入框/
+  开关/标题栏颜色与桌面主题无关。
+- 通过界面内“浅色/深色”按钮和合成鼠标点击完成主题切换；切换后所有自绘图标
+  重绘，无重启。
+- 字体检测读取当前系统字体 Noto Sans Mono CJK SC；全界面统一 700 字重，
+  抗锯齿和轻 hinting 生效，底部状态栏显示字体族。
+- 自绘 Wi-Fi、以太网、信号条、锁、刷新、加减、窗口控制、太阳/月亮、芯片、
+  眼睛和旋转指示器图标；界面中不再调用系统图标名或 GtkPasswordEntry。
+- 密码/隐藏网络对话框使用自绘关闭按钮、极简密码框和自绘眼睛切换；焦点环
+  使用应用强调色，而非系统蓝色。
+- 设置 GTK_THEME=Adwaita:light 启动默认深色，截图与常规深色一致，确认
+  应用配色不依赖桌面主题。
+- 自绘关闭按钮可关闭窗口；窗口控制不依赖系统标题栏按钮。
+- 本机 /dev/dri 可用，底部显示 GPU 加速、活动 DRM 显卡 Phoenix1 和 16 核；
+  GSK 渲染器与 CPU 型号在 tooltip 中。无 DRM 时的 CPU/Cairo 回退分支已编码。
+- 自绘应用图标安装到 hicolor 主题目录，桌面文件 Icon 使用该图标。
 
 ## 桌面扩展验证
 

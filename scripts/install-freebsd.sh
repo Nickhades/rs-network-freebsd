@@ -687,6 +687,7 @@ install_dir "$PREFIX/etc/dbus-1/system.d"
 install_dir "$PREFIX/share/dbus-1/system-services"
 install_dir "$PREFIX/share/polkit-1/actions"
 install_dir "$PREFIX/share/applications"
+install_dir "$PREFIX/share/icons/hicolor/scalable/apps"
 
 install_file "$RELEASE_DIR/netcore" "$PREFIX/bin/netcore" 755
 install_file "$RELEASE_DIR/netcore-gui" "$PREFIX/bin/netcore-gui" 755
@@ -696,6 +697,7 @@ install_file packaging/freebsd/org.netcore.NetworkManager.conf "$PREFIX/etc/dbus
 install_file packaging/freebsd/org.netcore.NetworkManager.service "$PREFIX/share/dbus-1/system-services/org.netcore.NetworkManager.service" 644
 install_file packaging/freebsd/org.netcore.policy "$PREFIX/share/polkit-1/actions/org.netcore.policy" 644
 install_file packaging/freebsd/netcore-gui.desktop "$PREFIX/share/applications/org.netcore.NetworkManager.Gui.desktop" 644
+install_file packaging/freebsd/org.netcore.NetworkManager.Gui.svg "$PREFIX/share/icons/hicolor/scalable/apps/org.netcore.NetworkManager.Gui.svg" 644
 
 if [ "$INSTALL_XFCE" = yes ]; then
     info "安装 XFCE Panel 插件"

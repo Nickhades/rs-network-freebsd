@@ -6,6 +6,7 @@ etc/dbus-1/system.d/org.netcore.NetworkManager.conf
 share/dbus-1/system-services/org.netcore.NetworkManager.service
 share/polkit-1/actions/org.netcore.policy
 share/applications/org.netcore.NetworkManager.Gui.desktop
+share/icons/hicolor/scalable/apps/org.netcore.NetworkManager.Gui.svg
 lib/xfce4/panel/plugins/libnetcore_xfce_plugin.so
 share/xfce4/panel/plugins/netcore-plugin.desktop
 lib/qt6/qml/Netcore/Backend/libnetcorebackendplugin.so
