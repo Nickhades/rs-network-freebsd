@@ -18,6 +18,8 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 ![netcore GTK4 网络管理器 - 浅色主题](docs/screenshot-gui-light.png)
 
+截图使用 mock 后端展示界面布局；真实扫描、SSID 与 C locale 验证见 docs/testing.md。
+
 ![XFCE Panel 插件](docs/screenshot-xfce-panel.png)
 
 界面配色、字体、图标和加速检测说明见 [docs/ui.md](docs/ui.md)。
@@ -44,7 +46,7 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 - 自绘 Cairo 图标、窗口控制按钮和应用图标；主窗口左上角显示 netcore 字标，
   任务栏图标在运行时由自绘 PNG 设置，不依赖系统图标主题
 - 自动识别系统字体族，统一粗体、抗锯齿与文本后处理
-- 启动时检测 DRM GPU；无 GPU 时自动回退 Cairo CPU 渲染，并在界面底部展示
+- 启动时检测 DRM GPU；无 GPU 时自动回退 Cairo CPU 渲染（检测仅在内部使用，不占界面）
 
 ## 快速开始
 

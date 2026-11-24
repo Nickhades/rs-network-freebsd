@@ -33,8 +33,8 @@ netcore-gui 使用 GTK4，但视觉系统不继承桌面主题。界面固定提
 - 字号使用界面自己的层级，不跟随桌面的字号设置无限放大；字体族则明确来自
   当前系统。
 
-底部状态栏会显示检测到的字体族。完整字体名、CPU 型号与 GSK 渲染器在底部
-状态栏的 tooltip 中。
+检测到的字体族只用于应用 CSS 和 Pango 渲染，不显示状态文字。需要诊断时可在
+启动时设置 NETCORE_DEBUG_ACCEL=1，将字体/GPU/CPU 信息输出到 stderr。
 
 ## 自绘图标
 
@@ -59,9 +59,9 @@ GTK 启动前，程序检查 `/dev/dri` 中是否存在 card/render 设备：
 - 无 DRM 设备：设置 `GSK_RENDERER=cairo`，使用 CPU/Cairo 软件渲染。
 - 用户显式设置 `GSK_RENDERER` 时不覆盖。
 
-界面底部显示“GPU 加速 · 显卡 · 核心数 · 字体”或“CPU 渲染 · CPU · 核心数 ·
-字体”。tooltip 进一步显示 CPU、GPU、GSK 渲染器和字体信息。检测是可用性
-判断；具体光栅化路径仍由 GTK/GSK 和驱动决定。
+检测结果不占用界面。需要诊断时设置 NETCORE_DEBUG_ACCEL=1，启动日志会输出
+GPU/CPU、GSK 渲染器和字体信息。检测只是可用性判断；具体光栅化路径仍由
+GTK/GSK 和驱动决定。
 
 ## 启动参数
 
@@ -71,7 +71,7 @@ GTK 启动前，程序检查 `/dev/dri` 中是否存在 card/render 设备：
 
 主题选择不写入配置；每次启动默认深色。
 
-截图：
+截图使用 mock 后端展示布局，不代表真实网络列表：
 
 - 深色：[screenshot-gui.png](screenshot-gui.png)
 - 浅色：[screenshot-gui-light.png](screenshot-gui-light.png)

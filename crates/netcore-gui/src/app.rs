@@ -22,7 +22,6 @@ use netcore_common::{
 };
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::accel;
 use crate::client::{self, Request, UiEvent};
 use crate::icons::{self, IconKind, NetcoreIcon, NetcoreSpinner};
 use crate::theme::{ThemeMode, Themer};
@@ -266,31 +265,9 @@ fn build_window(application: &Application, bus: BusKind, initial_theme: ThemeMod
     banner.set_margin_end(14);
     banner.set_margin_bottom(8);
 
-    let acceleration = accel::detect();
-    let footer = GtkBox::new(Orientation::Horizontal, 5);
-    footer.add_css_class("netcore-footer");
-    let footer_icon = NetcoreIcon::new(IconKind::Chip, 12);
-    footer_icon.widget().add_css_class("netcore-icon-dim");
-    footer.append(&footer_icon.widget());
-    let footer_label = Label::new(Some(&format!(
-        "{} · 字体 {}",
-        acceleration.summary,
-        themer.font_family()
-    )));
-    footer_label.set_xalign(0.0);
-    footer_label.set_hexpand(true);
-    footer_label.set_ellipsize(gtk::pango::EllipsizeMode::End);
-    footer.append(&footer_label);
-    footer.set_tooltip_text(Some(&format!(
-        "{}\n字体：{}",
-        acceleration.detail,
-        themer.font_family()
-    )));
-
     let root = GtkBox::new(Orientation::Vertical, 0);
     root.append(&scrolled);
     root.append(&banner);
-    root.append(&footer);
     window.set_child(Some(&root));
 
     let ui = Rc::new(Ui {

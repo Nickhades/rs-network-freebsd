@@ -67,11 +67,6 @@ impl Themer {
         themer
     }
 
-    #[must_use]
-    pub fn font_family(&self) -> &str {
-        &self.font_family
-    }
-
     pub fn toggle(&self) -> ThemeMode {
         let mode = self.mode.get().toggled();
         self.mode.set(mode);
@@ -550,17 +545,6 @@ separator {
 .netcore-banner-success {
     background-color: @nc_success_soft;
     border-color: @nc_success;
-}
-
-.netcore-footer {
-    color: @nc_dim;
-    padding: 1px 14px 5px 14px;
-}
-
-.netcore-footer label {
-    color: @nc_dim;
-    font-size: 11px;
-    text-shadow: none;
 }
 
 .netcore-password-row entry {

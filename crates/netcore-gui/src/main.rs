@@ -45,5 +45,9 @@ fn main() {
         ThemeArg::Light => ThemeMode::Light,
     };
     accel::prepare_renderer();
+    if std::env::var_os("NETCORE_DEBUG_ACCEL").is_some() {
+        let info = accel::detect();
+        eprintln!("netcore: {}; {}", info.summary, info.detail);
+    }
     app::run(bus, theme);
 }

@@ -41,8 +41,8 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - CLI status/list/scan/doctor/monitor 正常；monitor 连续收到初始快照和
   扫描后的 SnapshotChanged。
 - 非 root 修改操作返回 NotAuthorized，未触碰网络。
-- GTK4 界面启动，显示设备、IP、网络列表；深色/浅色截图分别为
-  docs/screenshot-gui.png 和 docs/screenshot-gui-light.png。
+- GUI 深/浅色布局截图使用 mock 后端，分别为 docs/screenshot-gui.png 和
+  docs/screenshot-gui-light.png；真实扫描与 C locale 验证见下方。
 - 最终 release 构建的 netcore-daemon --capsicum 在会话总线启动，helper 进程
   状态为 SC，netlink_active=true。
 - XFCE 插件在隔离 Xvfb + 私有 D-Bus 的临时面板中加载，显示 Wi-Fi 图标和
@@ -84,7 +84,8 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 通过界面内“浅色/深色”按钮和合成鼠标点击完成主题切换；切换后所有自绘图标
   重绘，无重启。
 - 字体检测读取当前系统字体 Noto Sans Mono CJK SC；全界面统一 700 字重，
-  抗锯齿和轻 hinting 生效，底部状态栏显示字体族。
+  抗锯齿和轻 hinting 生效。字体/GPU/CPU 信息不显示在界面；设置
+  NETCORE_DEBUG_ACCEL=1 时输出到 stderr。
 - 自绘 Wi-Fi、以太网、信号条、锁、刷新、加减、窗口控制、太阳/月亮、芯片、
   眼睛和旋转指示器图标；界面中不再调用系统图标名或 GtkPasswordEntry。
 - 密码/隐藏网络对话框使用自绘关闭按钮、极简密码框和自绘眼睛切换；焦点环
@@ -92,8 +93,9 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 设置 GTK_THEME=Adwaita:light 启动默认深色，截图与常规深色一致，确认
   应用配色不依赖桌面主题。
 - 自绘关闭按钮可关闭窗口；窗口控制不依赖系统标题栏按钮。
-- 本机 /dev/dri 可用，底部显示 GPU 加速、活动 DRM 显卡 Phoenix1 和 16 核；
-  GSK 渲染器与 CPU 型号在 tooltip 中。无 DRM 时的 CPU/Cairo 回退分支已编码。
+- 本机 /dev/dri 可用，内部检测到 GPU 加速、活动 DRM 显卡 Phoenix1 和 16 核；
+  GSK 渲染器与 CPU 型号可通过 NETCORE_DEBUG_ACCEL=1 诊断输出。无 DRM 时的
+  CPU/Cairo 回退分支已编码。
 - 自绘应用图标安装到 hicolor 主题目录，桌面文件 Icon 使用该图标。
 
 ## 桌面扩展验证

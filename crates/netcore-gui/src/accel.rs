@@ -2,8 +2,8 @@
 //!
 //! The GUI is a normal GTK4 application, so GSK chooses the concrete renderer.
 //! We still inspect the system before GTK starts: when no DRM device exists we
-//! explicitly ask GSK for its Cairo (CPU) renderer, and we surface the detected
-//! GPU/CPU and font information in the application footer.
+//! explicitly ask GSK for its Cairo (CPU) renderer. The UI does not display
+//! hardware diagnostics; set NETCORE_DEBUG_ACCEL=1 for a one-line stderr report.
 
 use std::process::Command;
 
