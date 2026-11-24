@@ -9,7 +9,7 @@ use std::f64::consts::PI;
 use std::rc::Rc;
 use std::time::Duration;
 
-use gtk::cairo::{Context, FillRule, LineCap, LineJoin};
+use gtk::cairo::{Context, FillRule, LineCap, LineJoin, Operator};
 use gtk::glib;
 use gtk::prelude::*;
 use gtk4 as gtk;
@@ -34,6 +34,7 @@ pub enum IconKind {
     Chip,
     Eye,
     EyeOff,
+    AppLogo,
 }
 
 #[derive(Clone)]
@@ -161,6 +162,7 @@ fn draw(area: &gtk::DrawingArea, cr: &Context, width: f64, height: f64, kind: Ic
         IconKind::Chip => draw_chip(cr),
         IconKind::Eye => draw_eye(cr, false),
         IconKind::EyeOff => draw_eye(cr, true),
+        IconKind::AppLogo => draw_app_logo(cr),
     }
 
     cr.restore().expect("cairo restore");
@@ -297,6 +299,24 @@ fn draw_chip(cr: &Context) {
     cr.stroke().expect("cairo stroke");
 }
 
+fn draw_app_logo(cr: &Context) {
+    rounded_rect(cr, 2.0, 2.0, 20.0, 20.0, 5.0);
+    cr.set_source_rgb(0.325, 0.788, 0.592);
+    cr.fill().expect("cairo fill");
+
+    // Cut the wireless mark out of the filled tile so the header background
+    // shows through. This is a brand mark, not an icon-theme lookup.
+    cr.set_operator(Operator::DestOut);
+    cr.set_line_width(1.7);
+    cr.arc(12.0, 17.8, 1.25, 0.0, 2.0 * PI);
+    cr.fill().expect("cairo fill");
+    for radius in [4.5, 8.0, 11.0] {
+        cr.arc(12.0, 18.2, radius, -2.35, -0.79);
+        cr.stroke().expect("cairo stroke");
+    }
+    cr.set_operator(Operator::Over);
+}
+
 fn draw_eye(cr: &Context, off: bool) {
     cr.move_to(3.5, 12.0);
     cr.curve_to(7.0, 6.5, 17.0, 6.5, 20.5, 12.0);
@@ -408,4 +428,41 @@ impl NetcoreSpinner {
             id.remove();
         }
     }
+}
+/// Build the self-designed application/brand icon as a texture for the
+/// window manager's task switcher. The installed .desktop icon uses the same
+/// mark, but this makes the main program recognizable even when run directly
+/// from a build tree without an installed icon theme.
+#[must_use]
+pub fn app_icon_texture() -> Option<gtk::gdk::Texture> {
+    const SIZE: i32 = 128;
+    let surface = gtk::cairo::ImageSurface::create(gtk::cairo::Format::ARgb32, SIZE, SIZE).ok()?;
+    {
+        let cr = Context::new(&surface).ok()?;
+        let scale = f64::from(SIZE) / 24.0;
+        cr.scale(scale, scale);
+        cr.set_line_cap(LineCap::Round);
+        cr.set_line_join(LineJoin::Round);
+
+        rounded_rect(&cr, 2.0, 2.0, 20.0, 20.0, 5.0);
+        cr.set_source_rgb(0.055, 0.078, 0.106);
+        cr.fill_preserve().ok()?;
+        cr.set_source_rgb(0.180, 0.239, 0.302);
+        cr.set_line_width(0.8);
+        cr.stroke().ok()?;
+
+        cr.set_source_rgb(0.325, 0.788, 0.592);
+        cr.arc(12.0, 17.8, 1.25, 0.0, 2.0 * PI);
+        cr.fill().ok()?;
+        cr.set_line_width(1.8);
+        for radius in [4.5, 8.0, 11.0] {
+            cr.arc(12.0, 18.2, radius, -2.35, -0.79);
+            cr.stroke().ok()?;
+        }
+    }
+    surface.flush();
+    let mut png = Vec::new();
+    surface.write_to_png(&mut png).ok()?;
+    let bytes = glib::Bytes::from(&png);
+    gtk::gdk::Texture::from_bytes(&bytes).ok()
 }

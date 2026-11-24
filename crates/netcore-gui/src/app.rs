@@ -5,6 +5,8 @@ use std::rc::Rc;
 use std::sync::mpsc::TryRecvError;
 use std::time::Duration;
 
+use gtk::gdk;
+use gtk::gdk::prelude::ToplevelExt;
 use gtk::prelude::*;
 use gtk::{
     Application, ApplicationWindow, Box as GtkBox, Button, HeaderBar, Label, Orientation, Revealer,
@@ -89,6 +91,16 @@ fn build_window(application: &Application, bus: BusKind, initial_theme: ThemeMod
     let header = HeaderBar::new();
     header.set_show_title_buttons(false);
     header.add_css_class("netcore-header");
+    let brand = GtkBox::new(Orientation::Horizontal, 5);
+    brand.add_css_class("netcore-brand");
+    brand.set_tooltip_text(Some("netcore 网络管理器"));
+    let app_logo = NetcoreIcon::new(IconKind::AppLogo, 22);
+    app_logo.widget().add_css_class("netcore-app-logo");
+    brand.append(&app_logo.widget());
+    let brand_label = Label::new(Some("netcore"));
+    brand_label.add_css_class("netcore-brand-label");
+    brand.append(&brand_label);
+    header.pack_start(&brand);
     let title = Label::new(Some("网络"));
     title.add_css_class("title");
     header.set_title_widget(Some(&title));
@@ -395,6 +407,18 @@ fn build_window(application: &Application, bus: BusKind, initial_theme: ThemeMod
         glib::ControlFlow::Continue
     });
 
+    window.connect_realize(move |window| {
+        let Some(surface) = window.surface() else {
+            return;
+        };
+        let Ok(toplevel) = surface.downcast::<gdk::Toplevel>() else {
+            return;
+        };
+        if let Some(texture) = icons::app_icon_texture() {
+            toplevel.set_icon_list(&[texture]);
+        }
+    });
+    window.set_icon_name(Some("org.netcore.NetworkManager.Gui"));
     window.present();
 }
 

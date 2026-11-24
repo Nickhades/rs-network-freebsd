@@ -818,6 +818,7 @@ name = "netcore-gui"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "cairo-rs",
  "clap",
  "gtk4",
  "netcore-client",

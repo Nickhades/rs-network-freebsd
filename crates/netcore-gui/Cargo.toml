@@ -12,6 +12,7 @@ name = "netcore-gui"
 path = "src/main.rs"
 
 [dependencies]
+cairo-rs = { version = "0.22.11", features = ["png"] }
 anyhow.workspace = true
 clap.workspace = true
 netcore-client.workspace = true

@@ -21,6 +21,8 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 ![XFCE Panel 插件](docs/screenshot-xfce-panel.png)
 
 界面配色、字体、图标和加速检测说明见 [docs/ui.md](docs/ui.md)。
+
+![netcore 品牌标志](docs/screenshot-brand.png)
 SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authenticity.md)。
 
 ## 功能
@@ -39,7 +41,8 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 - 可选 Capsicum：Netlink 解析器运行在 cap_enter(2) 后的子进程中
 - rc.d 服务、D-Bus 激活、polkit action、FreeBSD 安装脚本
 - GTK4 界面固定深色/浅色两套配色，默认深色，不跟随系统桌面主题
-- 自绘 Cairo 图标、窗口控制按钮和应用图标，不依赖系统图标主题
+- 自绘 Cairo 图标、窗口控制按钮和应用图标；主窗口左上角显示 netcore 字标，
+  任务栏图标在运行时由自绘 PNG 设置，不依赖系统图标主题
 - 自动识别系统字体族，统一粗体、抗锯齿与文本后处理
 - 启动时检测 DRM GPU；无 GPU 时自动回退 Cairo CPU 渲染，并在界面底部展示
 

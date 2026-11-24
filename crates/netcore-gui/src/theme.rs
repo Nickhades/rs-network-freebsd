@@ -244,6 +244,21 @@ headerbar:backdrop {
     color: @nc_text;
 }
 
+.netcore-brand {
+    padding-left: 2px;
+}
+
+.netcore-app-logo {
+    margin: 0 2px 0 2px;
+}
+
+.netcore-brand-label {
+    color: @nc_accent;
+    font-size: 12px;
+    font-weight: 800;
+    text-shadow: none;
+}
+
 headerbar .title {
     color: @nc_text;
     font-weight: 800;
