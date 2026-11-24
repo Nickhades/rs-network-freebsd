@@ -22,6 +22,7 @@ use crate::config::Config;
 use crate::dhcp::DhcpManager;
 use crate::error::ManagerError;
 use crate::iface::{self, InterfaceInfo, is_virtual};
+use crate::link::{LinkEvent, LinkState};
 use crate::system::{self, current_epoch, hostname, set_link_up, validate_ifname};
 use crate::wifi::{WifiService, WifiStatus, deduplicate};
 
@@ -53,6 +54,7 @@ struct Inner {
     op_lock: Mutex<()>,
     networks: RwLock<HashMap<String, Vec<WifiNetwork>>>,
     op_state: RwLock<Option<OperationState>>,
+    link_states: RwLock<HashMap<String, LinkState>>,
     last_errors: RwLock<HashMap<String, String>>,
     active_device: RwLock<Option<String>>,
     wifi_enabled: AtomicBool,
@@ -74,17 +76,14 @@ impl Manager {
         let (events, _) = broadcast::channel(128);
         let inner = Arc::new(Inner {
             ifconfig: config.ifconfig.clone().expect("ifconfig resolved"),
-            dhcp: DhcpManager::new(
-                config.dhclient.clone().expect("dhclient resolved"),
-                Duration::from_secs(config.dhcp_timeout),
-                !config.no_dhcp,
-            ),
+            dhcp: DhcpManager::from_config(config).expect("DHCP backend resolved"),
             no_dhcp: config.no_dhcp,
             wifi,
             refresh_lock: Mutex::new(()),
             op_lock: Mutex::new(()),
             networks: RwLock::new(HashMap::new()),
             op_state: RwLock::new(None),
+            link_states: RwLock::new(HashMap::new()),
             last_errors: RwLock::new(HashMap::new()),
             active_device: RwLock::new(None),
             wifi_enabled: AtomicBool::new(true),
@@ -144,6 +143,19 @@ impl Manager {
         let active_device = self.inner.active_device.read().await.clone();
         let wifi_enabled = self.inner.wifi_enabled.load(Ordering::SeqCst);
 
+        let present: HashSet<String> = interfaces.iter().map(|info| info.ifname.clone()).collect();
+        let vanished: Vec<String> = self
+            .inner
+            .link_states
+            .read()
+            .await
+            .keys()
+            .filter(|name| !present.contains(*name))
+            .cloned()
+            .collect();
+        for name in vanished {
+            self.advance_link(&name, LinkEvent::LinkLost).await;
+        }
         let mut devices = Vec::new();
         for mut info in interfaces {
             info.wireless = wireless.contains(&info.ifname);
@@ -333,6 +345,15 @@ impl Manager {
         if !self.inner.wifi_enabled.load(Ordering::SeqCst) {
             return Err(ManagerError::unavailable("Wi-Fi 已被禁用"));
         }
+        let previous_link = self
+            .inner
+            .link_states
+            .read()
+            .await
+            .get(ifname)
+            .copied()
+            .unwrap_or(LinkState::Down);
+        self.advance_link(ifname, LinkEvent::ScanRequested).await;
         let status = self.inner.wifi.status(ifname).await.ok();
         let mut networks = self
             .inner
@@ -361,6 +382,10 @@ impl Manager {
             ifname: ifname.to_owned(),
             networks: networks.clone(),
         });
+        self.advance_link(ifname, LinkEvent::ScanComplete).await;
+        if previous_link == LinkState::Connected {
+            self.set_link_state(ifname, LinkState::Connected).await;
+        }
         self.refresh().await;
         Ok(ScanResult {
             ifname: ifname.to_owned(),
@@ -413,6 +438,9 @@ impl Manager {
 
         self.inner.dhcp.stop(ifname).await;
         self.clear_error(ifname).await;
+        self.set_link_state(ifname, LinkState::Down).await;
+        self.advance_link(ifname, LinkEvent::StartAuthentication)
+            .await;
         self.set_operation(ifname, DeviceState::Connecting).await;
         self.refresh().await;
 
@@ -435,6 +463,8 @@ impl Manager {
                     .ok_or_else(|| ManagerError::operation("连接后接口从系统中消失"))
             }
             Err(error) => {
+                self.advance_link(ifname, LinkEvent::Failure).await;
+                self.set_link_state(ifname, LinkState::Down).await;
                 self.set_operation(ifname, DeviceState::Connecting).await;
                 self.inner.dhcp.stop(ifname).await;
                 let _ = self.inner.wifi.disconnect(ifname).await;
@@ -467,17 +497,23 @@ impl Manager {
             .await
             .map_err(|error| ManagerError::operation(format!("Wi-Fi 关联失败: {error:#}")))?;
 
+        self.advance_link(ifname, LinkEvent::Associated).await;
         self.set_operation(ifname, DeviceState::IpConfig).await;
         self.refresh().await;
 
         if !self.inner.no_dhcp {
-            let outcome = self
-                .inner
-                .dhcp
-                .ensure(ifname, true)
-                .await
-                .map_err(|error| ManagerError::operation(format!("DHCP 配置失败: {error:#}")))?;
+            self.advance_link(ifname, LinkEvent::DhcpStart).await;
+            let outcome = match self.inner.dhcp.ensure(ifname, true).await {
+                Ok(outcome) => outcome,
+                Err(error) => {
+                    self.advance_link(ifname, LinkEvent::DhcpExpired).await;
+                    return Err(ManagerError::operation(format!("DHCP 配置失败: {error:#}")));
+                }
+            };
+            self.advance_link(ifname, LinkEvent::DhcpBound).await;
             tracing::info!(ifname, message = outcome.message(), "DHCP 状态");
+        } else {
+            self.set_link_state(ifname, LinkState::Connected).await;
         }
         Ok(())
     }
@@ -500,6 +536,8 @@ impl Manager {
 
     async fn disconnect_locked(&self, info: &InterfaceInfo) -> Result<NetworkDevice, ManagerError> {
         let ifname = &info.ifname;
+        self.advance_link(ifname, LinkEvent::DisconnectRequested)
+            .await;
         self.set_operation(ifname, DeviceState::Disconnecting).await;
         self.refresh().await;
         let mut first_error: Option<ManagerError> = None;
@@ -517,6 +555,8 @@ impl Manager {
             });
         }
         self.clear_operation().await;
+        self.advance_link(ifname, LinkEvent::Disconnected).await;
+        self.set_link_state(ifname, LinkState::Down).await;
         let mut active = self.inner.active_device.write().await;
         if active.as_deref() == Some(ifname.as_str()) {
             *active = None;
@@ -570,11 +610,13 @@ impl Manager {
             self.refresh().await;
             if let Err(error) = self.inner.dhcp.ensure(ifname, false).await {
                 self.clear_operation().await;
+                self.set_link_state(ifname, LinkState::Down).await;
                 self.set_error(ifname, &error.to_string()).await;
                 self.refresh().await;
                 return Err(ManagerError::operation(format!("DHCP 配置失败: {error:#}")));
             }
             self.clear_operation().await;
+            self.set_link_state(ifname, LinkState::Connected).await;
             self.inner
                 .active_device
                 .write()
@@ -738,6 +780,27 @@ impl Manager {
             Ok(())
         } else {
             Err(ManagerError::unauthorized(system::privilege_hint()))
+        }
+    }
+
+    async fn set_link_state(&self, ifname: &str, state: LinkState) {
+        self.inner
+            .link_states
+            .write()
+            .await
+            .insert(ifname.to_owned(), state);
+    }
+
+    async fn advance_link(&self, ifname: &str, event: LinkEvent) {
+        let mut states = self.inner.link_states.write().await;
+        let state = states.get(ifname).copied().unwrap_or(LinkState::Down);
+        match state.transition(event) {
+            Ok(next) => {
+                states.insert(ifname.to_owned(), next);
+            }
+            Err(error) => {
+                tracing::debug!(ifname, %error, "忽略无效链路状态转换");
+            }
         }
     }
 

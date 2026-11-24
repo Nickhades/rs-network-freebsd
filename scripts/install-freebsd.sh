@@ -195,6 +195,20 @@ resolve_cargo() {
     return 1
 }
 
+detect_dhcp_clients() {
+    DHCPCD_AVAILABLE=no
+    DHCPCLIENT_AVAILABLE=no
+    DHCP_SELECTED=""
+    if command -v dhcpcd >/dev/null 2>&1; then
+        DHCPCD_AVAILABLE=yes
+        DHCP_SELECTED=dhcpcd
+    fi
+    if command -v dhclient >/dev/null 2>&1; then
+        DHCPCLIENT_AVAILABLE=yes
+        [ -n "$DHCP_SELECTED" ] || DHCP_SELECTED=dhclient
+    fi
+}
+
 detect_desktops() {
     AVAIL_XFCE=no
     AVAIL_GNOME=no
@@ -563,8 +577,16 @@ if [ "$PREFIX" != "/usr/local" ]; then
 fi
 
 detect_desktops
+detect_dhcp_clients
 resolve_desktop_choice
 info "桌面集成选择：$SELECTION_LABEL"
+if [ "$DHCPCD_AVAILABLE" = yes ]; then
+    info "DHCP 客户端：dhcpcd 可用（默认 auto 首选）"
+elif [ "$DHCPCLIENT_AVAILABLE" = yes ]; then
+    info "DHCP 客户端：dhclient 可用；如需 dhcpcd：pkg install dhcpcd"
+else
+    warn "未找到 dhcpcd/dhclient；联网需要先安装其中一个，或启动时使用 --no-dhcp"
+fi
 
 if [ "$MODE" != binary ]; then
     detect_core_env
@@ -580,6 +602,13 @@ if [ "$CHECK_ONLY" = yes ]; then
     printf '  暂存根目录: %s\n' "${DESTDIR:-（未设置，直接安装）}"
     printf '  Cargo 目标目录: %s\n' "$TARGET_DIR"
     printf '  桌面集成: %s\n' "$SELECTION_LABEL"
+    if [ "$DHCPCD_AVAILABLE" = yes ]; then
+        printf '%s\n' "  DHCP 客户端: dhcpcd（auto 首选）"
+    elif [ "$DHCPCLIENT_AVAILABLE" = yes ]; then
+        printf '%s\n' "  DHCP 客户端: dhclient（未找到 dhcpcd）"
+    else
+        printf '%s\n' "  DHCP 客户端: 未找到（可安装 dhcpcd 或使用 --no-dhcp）"
+    fi
     if [ "$MODE" = binary ]; then
         printf '%s\n' "  编译环境: 预编译模式，跳过探测"
     else

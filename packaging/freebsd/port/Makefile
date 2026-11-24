@@ -24,9 +24,15 @@ USE_QT=		base declarative
 
 LIB_DEPENDS=	libxfce4panel-2.0.so.4:x11-wm/xfce4-panel
 
-# The daemon and CLI require base system dhclient/wpa_supplicant. D-Bus is
-# needed at runtime and for service activation.
+# The daemon and CLI use base-system wpa_supplicant/dhclient. dhcpcd is an
+# optional alternative backend; D-Bus is needed at runtime for activation.
+OPTIONS_DEFINE=		DHCPCD
+DHCPCD_DESC=		Install dhcpcd as an optional DHCP backend
+DHCPCD_RUN_DEPENDS=	${LOCALBASE}/sbin/dhcpcd:net/dhcpcd
 RUN_DEPENDS=	${LOCALBASE}/bin/dbus-daemon:devel/dbus
+
+# Keep the prebuilt package usable without the optional backend; users can
+# install net/dhcpcd later and select --dhcp-backend dhcpcd.
 
 # Filled from the repository Cargo.lock. Regenerate with:
 #   cargo metadata --format-version 1 | ... (see PORTING.md)

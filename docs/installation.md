@@ -9,7 +9,9 @@ netcore 提供两种一键安装入口，并在安装前选择要集成的桌面
 
 无论选择哪种模式，核心组件都会安装：守护进程、CLI、GTK4 界面、自绘
 应用图标、rc.d、D-Bus service/policy、polkit 和桌面启动文件。桌面插件
-只安装所选项。
+只安装所选项。运行时 DHCP 客户端：FreeBSD 基本系统自带 dhclient；
+也可以安装 ports 的 dhcpcd，守护进程默认 auto 会优先使用它。安装脚本会
+打印当前检测结果和 pkg install dhcpcd 提示，但不会偷偷安装软件包。
 
 ## 选择桌面集成
 

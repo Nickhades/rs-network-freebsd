@@ -2,7 +2,7 @@
 
 netcore 是一个面向 FreeBSD 15.1 的原生网络管理器，采用 Rust 2024 编写。
 核心目标是提供与 Linux NetworkManager 类似的使用体验，但使用 FreeBSD 的
-系统原语：wpa_supplicant（D-Bus 或控制套接字）、dhclient(8)、
+系统原语：wpa_supplicant（D-Bus 或控制套接字）、dhclient(8) 或 dhcpcd(8)、
 getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 界面包括：
@@ -37,9 +37,10 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 
 - Wi-Fi 扫描、连接、断开，WPA/WPA2/WPA3-SAE 密码网络
 - wpa_supplicant 自动探测：优先 fi.w1.wpa_supplicant1 D-Bus，缺失时回退
-  到控制套接字；wpa_cli、ifconfig、dhclient 与控制目录按 PATH/环境/实际
-  目录自动发现（FreeBSD ports 构建常常没有 D-Bus 后端）
-- 连接成功后启动/接管 dhclient，断开时只停止自己启动的进程
+  到控制套接字；wpa_cli、ifconfig、dhclient、dhcpcd 与控制目录按
+  PATH/环境/实际目录自动发现（FreeBSD ports 构建常常没有 D-Bus 后端）
+- DHCP 后端可切换：`--dhcp-backend auto|dhclient|dhcpcd`，auto 优先 dhcpcd；
+  dhclient 保留给旧系统，外部客户端租约只被沿用、不会被杀死
 - 监听 NETLINK_ROUTE 的链路与地址事件，并保留 getifaddrs 周期轮询兜底
 - 设备状态、IP、MAC、MTU 与 Wi-Fi 信号/安全性统一建模
 - Wi-Fi 接口通过 ifconfig -g wlan 动态识别，不依赖 wlanN 名称
@@ -67,6 +68,7 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
     pkg install qt6-base qt6-declarative qt6-tools
     # GNOME Shell 扩展无需编译依赖
     # dhclient(8) 与 wpa_supplicant 属于 FreeBSD 基本系统
+    # 可选：pkg install dhcpcd（auto 会优先使用 dhcpcd）
 
 安装时会先选择要安装的桌面集成：
 
@@ -152,6 +154,24 @@ NotAuthorized。适合开发 GUI/插件：
 
 生产环境绝不要使用 --auth none 或 session 总线。
 
+## DHCP 后端
+
+    # 默认 auto：优先 dhcpcd，否则 dhclient
+    netcore-daemon --dhcp-backend auto
+
+    # 固定使用 dhcpcd（需要 /usr/local/sbin/dhcpcd 或 --dhcpcd）
+    netcore-daemon --dhcp-backend dhcpcd
+
+    # 回退到旧系统 dhclient
+    netcore-daemon --dhcp-backend dhclient
+
+    # 不启动 DHCP，使用静态地址
+    netcore-daemon --no-dhcp
+
+两种后端都通过同一套事件抽象向上层报告 BOUND/RENEW/EXPIRED/STOPPED；
+dhclient 使用 lease 文件与接口地址观察，dhcpcd 优先连接控制 socket，
+并在不可用时使用同样的 lease 兜底。
+
 ## CLI
 
     netcore status
@@ -177,8 +197,8 @@ NotAuthorized。适合开发 GUI/插件：
                                                                    |
                        +----------------------+--------------------+--------------------+
                        |                      |                    |                    |
-              wpa_supplicant            dhclient(8)         NETLINK_ROUTE       getifaddrs(3)
-              D-Bus / ctrl socket       per-interface       link/addr events    reconcile
+              wpa_supplicant        dhclient / dhcpcd       NETLINK_ROUTE       getifaddrs(3)
+              D-Bus / ctrl socket   per-interface backend   link/addr events    reconcile
                                                                    |
                                                            Capsicum helper (optional)
 
@@ -211,7 +231,7 @@ NotAuthorized。适合开发 GUI/插件：
 - 密码不写入磁盘，也不写日志。控制套接字后端通过临时 wpa_cli 参数传密码，
   会短暂出现在进程参数中；启用 wpa_supplicant D-Bus 后端时没有这一暴露。
 - Capsicum 只隔离 Netlink 解析进程；主进程必须保留文件系统与 fork/exec
-  能力来运行 dhclient 和访问 wpa_supplicant，不能整体 cap_enter。
+  能力来运行 DHCP 客户端和访问 wpa_supplicant，不能整体 cap_enter。
 - 详细威胁模型与加固建议见 docs/security.md。
 
 ## 已知限制
@@ -221,6 +241,10 @@ NotAuthorized。适合开发 GUI/插件：
   接口不会猜测原始字节；主 GUI 会阻止这类连接，而不是连到错误名称。
 - 不持久化已保存网络；每次连接把网络临时加入 wpa_supplicant。
 - 不主动探测互联网连通性；connectivity=local 表示已有本地地址。
+- 路由与 DNS 仍由选中的 DHCP 客户端（dhclient 或 dhcpcd）写入；netcore
+  尚未在 daemon 内实现跨接口的路由/DNS 所有权清理。
+- dhcpcd 控制 socket 的 JSON 事件布局在不同版本间不完全一致；没有可用事件
+  时会回退到接口地址和 lease 文件观察。
 - FreeBSD rtnetlink 仍在演进，NETLINK_ROUTE 只作为加速路径，轮询兜底
   保证最终一致性。
 - 控制套接字后端的密码有短暂的 argv 暴露窗口（见安全说明）。

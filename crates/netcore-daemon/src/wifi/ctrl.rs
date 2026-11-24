@@ -4,15 +4,20 @@
 //! no D-Bus interface compiled in. Commands are executed without a shell and
 //! every dynamic value is escaped for wpa_supplicant's quoted-string parser.
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
 use netcore_common::ssid::{display_and_hex, same_ssid};
 use netcore_common::{Security, WifiNetwork};
+use tokio::net::UnixDatagram;
 use tokio::process::Command;
 
 use super::{WifiStatus, deduplicate, escape_wpa_value, security_from_flags, unescape_wpa_bytes};
+use netcore_common::tools::find_wpa_ctrl_dir;
+
+static ATTACH_COUNTER: AtomicU64 = AtomicU64::new(0);
 
 struct NetworkParams<'a> {
     ssid: &'a str,
@@ -26,6 +31,62 @@ struct NetworkParams<'a> {
 pub struct CtrlWifi {
     ctrl_dir: PathBuf,
     wpa_cli: PathBuf,
+}
+
+struct AttachedCtrl {
+    socket: UnixDatagram,
+    local_path: PathBuf,
+}
+
+impl AttachedCtrl {
+    async fn attach(ctrl_dir: &Path, ifname: &str) -> Result<Self> {
+        let directory = if ctrl_dir.as_os_str().is_empty() {
+            find_wpa_ctrl_dir(None).unwrap_or_else(|| PathBuf::from("/var/run/wpa_supplicant"))
+        } else {
+            ctrl_dir.to_path_buf()
+        };
+        let socket_path = directory.join(ifname);
+        let local_path = std::env::temp_dir().join(format!(
+            "netcore-wpa-{}-{}.sock",
+            std::process::id(),
+            ATTACH_COUNTER.fetch_add(1, Ordering::Relaxed)
+        ));
+        let _ = std::fs::remove_file(&local_path);
+        let socket = UnixDatagram::bind(&local_path)
+            .with_context(|| format!("创建 wpa 控制事件套接字 {} 失败", local_path.display()))?;
+        socket
+            .connect(&socket_path)
+            .with_context(|| format!("连接 wpa 控制套接字 {} 失败", socket_path.display()))?;
+        socket.send(b"ATTACH\n").await.context("发送 ATTACH 失败")?;
+        Ok(Self { socket, local_path })
+    }
+
+    async fn wait_for(&self, marker: &str, timeout: Duration) -> Result<bool> {
+        let deadline = tokio::time::Instant::now() + timeout;
+        let mut buffer = [0_u8; 4096];
+        loop {
+            let remaining = deadline.saturating_duration_since(tokio::time::Instant::now());
+            if remaining.is_zero() {
+                return Ok(false);
+            }
+            let count = match tokio::time::timeout(remaining, self.socket.recv(&mut buffer)).await {
+                Ok(Ok(count)) => count,
+                Ok(Err(error)) => return Err(error).context("读取 wpa 事件失败"),
+                Err(_) => return Ok(false),
+            };
+            for line in buffer[..count].split(|byte| *byte == b'\n') {
+                if String::from_utf8_lossy(line).contains(marker) {
+                    return Ok(true);
+                }
+            }
+        }
+    }
+}
+
+impl Drop for AttachedCtrl {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.local_path);
+    }
 }
 
 impl CtrlWifi {
@@ -96,6 +157,9 @@ impl CtrlWifi {
     }
 
     pub async fn scan(&self, ifname: &str) -> Result<Vec<WifiNetwork>> {
+        // Attach before SCAN so the completion event cannot race the command.
+        // A busy scan also produces this event for the in-flight request.
+        let monitor = AttachedCtrl::attach(&self.ctrl_dir, ifname).await.ok();
         let scan_result = self.run(ifname, &["scan"]).await;
         if let Err(error) = &scan_result {
             let message = error.to_string();
@@ -104,7 +168,16 @@ impl CtrlWifi {
             }
             tracing::debug!(ifname, "扫描已在进行中，复用当前结果");
         }
-        tokio::time::sleep(Duration::from_millis(2200)).await;
+        if let Some(monitor) = &monitor {
+            match monitor
+                .wait_for("CTRL-EVENT-SCAN-RESULTS", Duration::from_secs(10))
+                .await
+            {
+                Ok(true) => {}
+                Ok(false) => tracing::debug!(ifname, "等待扫描完成事件超时，读取当前结果"),
+                Err(error) => tracing::debug!(ifname, %error, "扫描事件监听失败，读取当前结果"),
+            }
+        }
         let status = self.status(ifname).await.ok();
         let raw = self.run_bytes(ifname, &["scan_results"]).await?;
         let mut networks = parse_scan_results(&raw);
@@ -143,6 +216,7 @@ impl CtrlWifi {
             bail!("该网络需要密码");
         }
 
+        let monitor = AttachedCtrl::attach(&self.ctrl_dir, ifname).await.ok();
         let _ = self.disconnect(ifname).await;
         let id = self.add_network(ifname).await?;
         let result = self
@@ -161,6 +235,18 @@ impl CtrlWifi {
         if let Err(error) = result {
             let _ = self.remove_network(ifname, &id).await;
             return Err(error);
+        }
+        if let Some(monitor) = &monitor
+            && monitor
+                .wait_for("CTRL-EVENT-CONNECTED", Duration::from_secs(35))
+                .await
+                .unwrap_or(false)
+            && self
+                .status(ifname)
+                .await
+                .is_ok_and(|status| status.connected)
+        {
+            return Ok(());
         }
         match self.wait_completed(ifname).await {
             Ok(()) => Ok(()),

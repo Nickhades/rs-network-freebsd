@@ -1,0 +1,17 @@
+# FreeBSD unit/contract CI for netcore.
+#
+# Real wpa_supplicant + dhcpcd lease acquisition requires a disposable VM with
+# two test interfaces and is intentionally not run against the shared Cirrus
+# runner.  The daemon tests below cover the DHCP event contract, lease parsing
+# and fake-process lifecycle; see docs/testing.md for the manual VM matrix.
+freebsd_task:
+  name: FreeBSD 15 / unit and contract tests
+  freebsd_instance:
+    image_family: freebsd-15-0
+  install_script:
+    - pkg install -y rust pkgconf dbus
+    - rustc --version
+  test_script:
+    - cargo fmt --all --check
+    - cargo test -p netcore-common -p netcore-daemon -p netcore-client -p netcore-cli
+    - cargo clippy -p netcore-common -p netcore-daemon -p netcore-client -p netcore-cli --all-targets -- -D warnings

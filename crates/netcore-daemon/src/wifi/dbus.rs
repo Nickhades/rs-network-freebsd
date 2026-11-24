@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use futures_util::StreamExt;
 use netcore_common::ssid::display_and_hex;
 use netcore_common::{Security, WifiNetwork};
 use zbus::names::BusName;
@@ -113,19 +114,30 @@ impl DbusWifi {
 
     pub async fn scan(&self, ifname: &str) -> Result<Vec<WifiNetwork>> {
         let interface = self.interface(ifname).await?;
+        // Subscribe to PropertiesChanged before issuing Scan.  This avoids the
+        // old 300 ms polling loop and also catches a scan that finishes very
+        // quickly.
+        let mut changes = interface.receive_signal("PropertiesChanged").await.ok();
         let empty: HashMap<String, Variant<'static>> = HashMap::new();
         if let Err(error) = interface.call::<_, _, ()>("Scan", &(empty,)).await {
             tracing::debug!(ifname, %error, "wpa D-Bus Scan 返回错误，尝试读取现有结果");
         }
-        for _ in 0..20 {
-            tokio::time::sleep(Duration::from_millis(300)).await;
-            match interface.get_property::<bool>("Scanning").await {
-                Ok(true) => continue,
-                Ok(false) => break,
-                Err(_) => {
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
-                    break;
+        if let Some(changes) = changes.as_mut() {
+            let wait = async {
+                while let Some(message) = changes.next().await {
+                    if changed_property(&message, "Scanning")
+                        .and_then(|value| bool::try_from(value).ok())
+                        == Some(false)
+                    {
+                        return;
+                    }
                 }
+            };
+            if tokio::time::timeout(Duration::from_secs(10), wait)
+                .await
+                .is_err()
+            {
+                tracing::debug!(ifname, "等待 wpa D-Bus 扫描完成信号超时");
             }
         }
 
@@ -263,27 +275,33 @@ impl DbusWifi {
             .call("AddNetwork", &(properties,))
             .await
             .context("wpa_supplicant AddNetwork 失败")?;
+        let mut changes = interface.receive_signal("PropertiesChanged").await.ok();
         interface
             .call::<_, _, ()>("SelectNetwork", &(network_path.clone(),))
             .await
             .context("wpa_supplicant SelectNetwork 失败")?;
 
-        let deadline = tokio::time::Instant::now() + Duration::from_secs(35);
-        loop {
-            let state = interface
-                .get_property::<String>("State")
+        if let Some(changes) = changes.as_mut() {
+            let wait = async {
+                while let Some(message) = changes.next().await {
+                    if changed_property(&message, "State")
+                        .and_then(|value| String::try_from(value).ok())
+                        .is_some_and(|state| state.eq_ignore_ascii_case("completed"))
+                    {
+                        return;
+                    }
+                }
+            };
+            if tokio::time::timeout(Duration::from_secs(35), wait)
                 .await
-                .unwrap_or_else(|_| "unknown".to_owned());
-            if state.eq_ignore_ascii_case("completed") {
+                .is_ok()
+            {
                 return Ok(());
             }
-            if tokio::time::Instant::now() >= deadline {
-                let _: Result<(), _> = interface.call("RemoveNetwork", &(network_path,)).await;
-                let _: Result<(), _> = interface.call("Disconnect", &()).await;
-                bail!("连接超时（wpa 状态: {state}）");
-            }
-            tokio::time::sleep(Duration::from_millis(400)).await;
         }
+        let _: Result<(), _> = interface.call("RemoveNetwork", &(network_path,)).await;
+        let _: Result<(), _> = interface.call("Disconnect", &()).await;
+        bail!("等待 wpa D-Bus State=completed 超时");
     }
 
     pub async fn disconnect(&self, ifname: &str) -> Result<()> {
@@ -294,6 +312,14 @@ impl DbusWifi {
             .context("wpa_supplicant Disconnect 失败")?;
         Ok(())
     }
+}
+
+fn changed_property(message: &zbus::Message, wanted: &str) -> Option<OwnedVariant> {
+    let (_, changed, _) = message
+        .body()
+        .deserialize::<(String, HashMap<String, OwnedVariant>, Vec<String>)>()
+        .ok()?;
+    changed.get(wanted)?.try_clone().ok()
 }
 
 fn format_mac(bytes: &[u8]) -> String {

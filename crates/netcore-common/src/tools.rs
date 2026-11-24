@@ -65,6 +65,19 @@ pub fn dhclient() -> Option<PathBuf> {
 }
 
 #[must_use]
+pub fn dhcpcd() -> Option<PathBuf> {
+    find_executable(
+        "dhcpcd",
+        "DHCPCD",
+        &[
+            "/usr/local/sbin/dhcpcd",
+            "/usr/sbin/dhcpcd",
+            "/sbin/dhcpcd",
+            "/usr/local/bin/dhcpcd",
+        ],
+    )
+}
+
 pub fn wpa_cli() -> Option<PathBuf> {
     find_executable(
         "wpa_cli",

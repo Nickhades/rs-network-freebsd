@@ -80,6 +80,23 @@ dhclient(8) 由 netcore 用 -d（前台）启动，以便：
 “是否有地址”以 getifaddrs 为准，而不是 dhclient 的退出码，因为 dhclient 可能
 在前台持续续租。
 
+## DHCP 后端选择
+
+    --dhcp-backend auto      # 默认；优先 dhcpcd，否则 dhclient
+    --dhcp-backend dhcpcd    # 固定 dhcpcd
+    --dhcp-backend dhclient  # 固定 dhclient（旧系统回退）
+    --no-dhcp                # 不启动 DHCP
+
+auto 的探测顺序是：显式 `--dhcpcd`/环境变量 DHCPCD → PATH/常见目录中的
+`dhcpcd` → 显式 `--dhclient`/DHCLIENT → `dhclient`。两条后端路径都会先校验
+可执行位；不会通过 shell 或未校验的 PATH 拼接执行。
+
+dhcpcd 后端使用 `-q -B --controlgroup wheel --metric 100`，优先读取
+`/var/run/dhcpcd/<if>.sock`（并兼容 `/var/run/dhcpcd-<if>.sock`）的 JSON 事件；
+控制 socket 不可用时回退到接口地址和 lease。外部 dhcpcd 不会被终止。
+当前 DNS 仍由 dhcpcd/dhclient 自己管理；启动 dhcpcd 时未加 `-C resolv.conf`，
+避免破坏现有 DNS。
+
 ## getifaddrs 与 if_data
 
 - AF_LINK 的 ifa_data 指向 if_data，读取 MTU 与运行状态。
@@ -112,7 +129,7 @@ D-Bus policy 允许所有本地用户向服务发送消息（只读功能需要�
 4. 父进程仍负责所有特权网络操作。
 
 这样，最容易被恶意内核/驱动消息影响的解析器处于能力模式，即使被攻破也无法
-打开文件或网络。主守护进程不能整体进入能力模式，因为要 fork/exec dhclient、
+打开文件或网络。主守护进程不能整体进入能力模式，因为要 fork/exec DHCP 客户端、
 打开 wpa control socket、读取配置。FreeBSD 提供 libcap_net/cap_net Casper
 服务，可用于进一步把静态地址配置移入受限 helper；当前版本尚未使用。
 
@@ -133,14 +150,14 @@ netcore.rc 使用 daemon(8) 托管：
 - pkg-config
 - GTK4 开发文件（GUI）
 - libxfce4panel 2.0、GTK3 开发文件（XFCE 插件）
-- dbus、wpa_supplicant、dhclient（系统命令）
+- dbus、wpa_supplicant、dhclient（基本系统）；dhcpcd（可选，pkg install dhcpcd）
 - polkit（可选，推荐）
 ## 接口、工具与 SSID 发现
 
 - 无线接口通过实际的 `ifconfig -g wlan` 组判断，不依赖 wlanN 名称；允许
   重命名接口。
-- `--wpa-cli`、`--ifconfig`、`--dhclient` 未指定时依次检查环境变量、PATH
-  和常见 FreeBSD 目录，不要求工具在 /usr/local 或 /usr/sbin。
+- `--wpa-cli`、`--ifconfig`、`--dhclient`、`--dhcpcd` 未指定时依次检查
+  环境变量、PATH 和常见 FreeBSD 目录，不要求工具在 /usr/local 或 /usr/sbin。
 - 控制目录查找实际 socket，不假定只有一个固定目录。
 - SSID 是 32 字节以内的任意八位组；`ssid` 是显示文本，`ssid_hex` 是精确
   字节。中文 UTF-8 在 C locale 下仍然还原为中文。

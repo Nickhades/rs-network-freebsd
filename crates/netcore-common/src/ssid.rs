@@ -86,6 +86,20 @@ pub fn is_utf8_hex(hex: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use proptest::prelude::*;
+
+    proptest! {
+        #[test]
+        fn hex_round_trips_arbitrary_ssid(bytes in prop::collection::vec(any::<u8>(), 0..=32)) {
+            let encoded = encode_hex(&bytes);
+            let decoded = decode_hex(&encoded);
+            prop_assert_eq!(decoded.as_deref(), Some(bytes.as_slice()));
+            let (display, hex) = display_and_hex(&bytes);
+            prop_assert_eq!(hex.as_deref(), (!bytes.is_empty()).then_some(encoded.as_str()));
+            let replacement = '\u{FFFD}';
+            prop_assert!(!display.contains(replacement));
+        }
+    }
 
     #[test]
     fn preserves_chinese_utf8() {
