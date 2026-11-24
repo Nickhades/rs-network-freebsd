@@ -9,6 +9,10 @@ netcore 是 FreeBSD 上的原生网络管理器。本扩展在 GNOME Shell 顶�
 - 显示语言：简体中文
 - 许可证：BSD-2-Clause（与 netcore 项目一致）
 
+## 效果截图
+
+![GNOME Shell 扩展菜单（mock D-Bus 数据）](../../../docs/screenshot-gnome-extension.png)
+
 ## 功能
 
 - 面板指示器使用 Adwaita 符号图标，随连接状态变化：已连接、正在连接/断开、

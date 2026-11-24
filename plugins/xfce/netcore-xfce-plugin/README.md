@@ -3,6 +3,10 @@
 这是一个用 Rust 编写的原生 XFCE Panel 4.20 插件，直接通过 GDBus 与
 netcore 守护进程通信，不轮询子进程，也不阻塞面板主循环。
 
+## 效果截图
+
+![XFCE Panel 菜单（mock D-Bus 数据）](../../../docs/screenshot-xfce-menu.png)
+
 ## 构建
 
     cargo build --release -p netcore-xfce-plugin

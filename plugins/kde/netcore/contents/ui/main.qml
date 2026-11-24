@@ -42,7 +42,7 @@ PlasmoidItem {
     }
 
     onExpandedChanged: {
-        if (expanded) {
+        if (root.expanded) {
             netcoreBackend.refresh();
         }
     }

@@ -18,9 +18,15 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 ![netcore GTK4 网络管理器 - 浅色主题](docs/screenshot-gui-light.png)
 
-截图使用 mock 后端展示界面布局；真实扫描、SSID 与 C locale 验证见 docs/testing.md。
+主界面与插件截图使用 mock 后端展示界面布局；真实扫描、SSID 与 C locale 验证见 docs/testing.md。
 
 ![XFCE Panel 插件](docs/screenshot-xfce-panel.png)
+
+![XFCE Panel 插件菜单](docs/screenshot-xfce-menu.png)
+
+![GNOME Shell 扩展](docs/screenshot-gnome-extension.png)
+
+![KDE Plasma 小部件](docs/screenshot-kde-plasmoid.png)
 
 界面配色、字体、图标和加速检测说明见 [docs/ui.md](docs/ui.md)。
 

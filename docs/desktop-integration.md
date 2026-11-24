@@ -27,6 +27,15 @@
 --desktop all 安装三者。KDE 需要 Qt6 开发文件，XFCE 需要
 libxfce4panel 开发文件，GNOME 扩展无需编译。
 
+## 效果截图
+
+- XFCE Panel：[面板](screenshot-xfce-panel.png)、[菜单](screenshot-xfce-menu.png)
+- GNOME Shell：[扩展菜单](screenshot-gnome-extension.png)
+- KDE Plasma：[小部件完整表示](screenshot-kde-plasmoid.png)
+
+截图使用隔离 Xvfb + 私有 D-Bus + mock 后端，只展示布局；真实网络扫描见
+docs/testing.md。
+
 ## XFCE Panel
 
 实现：Rust cdylib，运行在 xfce4-panel 进程内。通过 GDBus 异步读取
@@ -42,7 +51,7 @@ GetSnapshot，订阅 SnapshotChanged，菜单在打开时重建。
 断开设备、扫描、隐藏网络和打开 netcore-gui。
 
 已在隔离 Xvfb + 私有 D-Bus 中验证插件加载，日志显示
-new item (type=object-type, name=netcore-plugin)，面板显示“云涧”。
+new item (type=object-type, name=netcore-plugin)；截图使用 mock 数据。
 
 详见 plugins/xfce/netcore-xfce-plugin/README.md。
 

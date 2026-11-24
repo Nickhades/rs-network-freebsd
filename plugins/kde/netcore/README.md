@@ -9,6 +9,10 @@
 - UI 全部为中文，使用 PlasmaComponents3 / Kirigami / PlasmaExtras，符合 Plasma 6 原生外观。
 - 所有 D-Bus 调用都是异步的，不阻塞 plasmashell 的 GUI 线程。
 
+## 效果截图
+
+![Plasma 6 小部件完整表示（mock D-Bus 数据）](../../../docs/screenshot-kde-plasmoid.png)
+
 ## 目录结构
 
 ```text

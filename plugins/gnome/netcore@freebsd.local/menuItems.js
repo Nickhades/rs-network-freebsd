@@ -107,7 +107,6 @@ export function createWifiItem(device, network, onActivate) {
     const labels = new St.BoxLayout({
         vertical: true,
         x_expand: true,
-        spacing: 2,
     });
     labels.add_child(new St.Label({
         text: truncate(ssid, SSID_MAX),
@@ -153,7 +152,6 @@ export function createDeviceItem(device, action, onActivate) {
     const labels = new St.BoxLayout({
         vertical: true,
         x_expand: true,
-        spacing: 2,
     });
     labels.add_child(new St.Label({
         text: truncate(asString(device?.ifname, '未知设备'), 32),

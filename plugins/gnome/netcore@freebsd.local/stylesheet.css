@@ -69,3 +69,8 @@
 .netcore-password-entry {
     width: 24em;
 }
+/* GNOME Shell 47 no longer exposes St.BoxLayout.spacing; use CSS margins. */
+.netcore-network-meta,
+.netcore-device-meta {
+    margin-top: 2px;
+}

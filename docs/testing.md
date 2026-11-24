@@ -46,8 +46,8 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 最终 release 构建的 netcore-daemon --capsicum 在会话总线启动，helper 进程
   状态为 SC，netlink_active=true。
 - XFCE 插件在隔离 Xvfb + 私有 D-Bus 的临时面板中加载，显示 Wi-Fi 图标和
-  当前 SSID “云涧”；日志确认 new item (type=object-type,
-  name=netcore-plugin)。截图见 docs/screenshot-xfce-panel.png。
+  状态；右键菜单已实际渲染。截图见 docs/screenshot-xfce-panel.png 和
+  docs/screenshot-xfce-menu.png。
 - 以 --desktop all 执行的完整 DESTDIR 安装通过，pkg-plist 中 28 个路径
   全部存在，GNOME JSON、KDE metadata、rc.d 语法与 XML 配置校验通过。
 
@@ -100,28 +100,34 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 
 ## 桌面扩展验证
 
-GNOME（由扩展实现代理使用私有 D-Bus mock 验证）：
+GNOME（GNOME Shell 47.10 X11 + 私有 D-Bus mock）：
 
 - 所有 6 个 JS 文件通过 node --check。
 - metadata.json 的 UUID、版本、shell-version、无 settings-schema 断言通过。
 - 14 项工具函数、22 项 D-Bus 集成（含参数签名、信号、服务重启）、3 项
   清理、6 项错误映射测试通过。
-- 未在实际 GNOME 会话中启用；UI 视觉效果未人工确认。
+- 在 GNOME Shell 47.10 X11 + 隔离 Xvfb + 私有 D-Bus 中实际启用，顶部图标和
+  完整菜单成功渲染；修复 St.BoxLayout.spacing 在 Shell 47 已移除导致的菜单
+  异常。截图见 docs/screenshot-gnome-extension.png。
+- 未通过 GDM 登录真实桌面会话；视觉验证使用无 GDM 的临时 Shell。
 
-KDE Plasma：
+KDE Plasma（plasmoidviewer + 私有 D-Bus mock）：
 
 - 使用 build.sh 构建 Netcore.Backend QML 插件成功。
 - qmllint 零警告；qmlcachegen 4 个 QML 全部通过；qmlformat 解析通过。
 - 私有 D-Bus mock 集成：snapshot 解析、网络排序、ConnectWifi、
   SetDeviceEnabled、busy/daemonAvailable 状态、密码窗口关闭均通过。
 - CMake 规则已编写，但本机没有 cmake 可执行文件，未执行 CMake 构建。
-- 未在实际 Plasma 会话中加载；视觉布局未人工确认。
+- 使用 plasmoidviewer 在 Plasma 6.7.5 QML 运行时中实际加载完整表示；
+  Wi-Fi 列表、设备状态和 mock 标识均正常渲染。截图见
+  docs/screenshot-kde-plasmoid.png。
+- 未通过完整 Plasma 登录会话加载；视觉验证使用隔离 Xvfb 中的 plasmoidviewer。
 
-XFCE：
+XFCE（xfce4-panel 4.20.8 + 私有 D-Bus mock）：
 
 - 调试版 .so 在 xfce4-panel 4.20.8 的独立 Xvfb 会话中加载成功。
-- 插件直接通过 GDBus 获取当前快照，面板显示 Wi-Fi 符号和 SSID。
-- 菜单交互未通过自动化点击验证。
+- 插件直接通过 GDBus 获取当前快照，面板显示 Wi-Fi 符号和状态。
+- 右键菜单已通过 XTest 点击打开并截图。
 
 ## 未执行的危险测试
 
@@ -131,7 +137,8 @@ XFCE：
 - ifconfig down/up。
 - 系统总线 D-Bus 激活与 polkit 交互认证。
 - rc.d 启动/停止。
-- 真实 GNOME Shell / Plasma 会话安装。
+- 通过 GDM 登录的真实 GNOME / Plasma 会话安装。
+- 本次截图使用无 GDM 的隔离 GNOME Shell 和 plasmoidviewer，不是完整桌面会话。
 
 相关代码路径已通过单元测试、编译检查和 mock 集成测试；发布前应在一次性
 虚拟机或专用测试机执行完整集成测试。建议步骤：
