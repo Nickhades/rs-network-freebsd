@@ -472,7 +472,8 @@ fn handle_event(
             // A failed action can leave the widgets ahead of the daemon (for
             // example a Wi-Fi switch that was toggled). Re-render the last
             // snapshot unconditionally so the UI reflects reality again.
-            if let Some(snapshot) = state.borrow().snapshot.clone() {
+            let snapshot = state.borrow().snapshot.clone();
+            if let Some(snapshot) = snapshot {
                 state.borrow_mut().last_key = None;
                 render_snapshot(ui, state, snapshot);
             }

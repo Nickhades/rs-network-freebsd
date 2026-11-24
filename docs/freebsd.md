@@ -88,14 +88,16 @@ netcore 只使用 dhcpcd(8)。命令形如：
     --resolv-conf <path>  # 默认 /etc/resolv.conf，供测试/自定义镜像
     --no-dhcp             # 静态地址
 
-推荐 rc.conf：
+当前版本推荐 rc.conf（系统启动 wpa_supplicant/dhcpcd，netcore 连接并沿用）：
 
     wlans_rtw890="wlan0"
     create_args_wlan0="country CN"
-    ifconfig_wlan0="up"
-    dhcpcd_enable="NO"
+    ifconfig_wlan0="WPA"
+    dhcpcd_enable="YES"
+    dhcpcd_flags="-q -b"
     wpa_supplicant_program="/usr/local/sbin/wpa_supplicant"
 
-不要设置 `ifconfig_wlan0="WPA"`；否则 rc 脚本会抢先启动 wpa_supplicant，
-daemon 只能连接它而无法管理其生命周期。netcore 当前假设 wpa_supplicant 已
-运行，D-Bus 优先，控制套接字回退。
+不要设置 `denyinterfaces wlan0`，否则系统 dhcpcd 不会为无线接口分配地址。
+netcore 当前假设 wpa_supplicant 已运行，D-Bus 优先，控制套接字回退；如果
+rc 只把接口 up 而不启动 wpa_supplicant，wpa_cli 扫描会报
+"Failed to connect to non-global ctrl_ifname"。

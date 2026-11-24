@@ -173,16 +173,21 @@ daemon 在 BOUND 后用活动接口的 DNS 重写 `/etc/resolv.conf`，断开时
 对应条目；路由由 dhcpcd 自己管理并在停止时清理。外部 dhcpcd 只沿用其租约，
 不写 DNS、不发送终止信号。
 
-推荐 rc.conf（避免系统 rc 脚本和 daemon 抢 wpa_supplicant）：
+当前版本推荐让系统 rc 启动 wpa_supplicant 和 dhcpcd，netcore 通过
+D-Bus/控制 socket 连接它们：
 
     wlans_rtw890="wlan0"
     create_args_wlan0="country CN"
-    ifconfig_wlan0="up"
-    dhcpcd_enable="NO"          # netcore 按接口管理 dhcpcd
+    ifconfig_wlan0="WPA"
+    dhcpcd_enable="YES"
+    dhcpcd_flags="-q -b"
     wpa_supplicant_program="/usr/local/sbin/wpa_supplicant"
 
-不要设置 `ifconfig_wlan0="WPA"`；daemon 连接时通过 wpa_supplicant D-Bus
-AddNetwork/SelectNetwork 管理关联。
+不要在 dhcpcd_flags 里 denyinterfaces wlan0，否则系统 dhcpcd 不会给无线接口
+分配地址。netcore 当前不会自动启动 wpa_supplicant；如果使用
+`ifconfig_wlan0="up"` 且不启动 wpa_supplicant，重启后
+`/var/run/wpa_supplicant` 为空，wpa_cli 扫描会报
+"Failed to connect to non-global ctrl_ifname"。
 
 ## CLI
 

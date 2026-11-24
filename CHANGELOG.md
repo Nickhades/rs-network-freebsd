@@ -1,5 +1,12 @@
 # Changelog
 
+## v0.3.1
+
+- 修复 GUI 在动作失败后重新渲染快照时的 RefCell 双重借用 panic。
+- 修正 rc.conf 文档：当前版本让系统 rc 启动 wpa_supplicant 和 dhcpcd，
+  netcore 连接并沿用；避免重启后没有 wpa 控制 socket 导致扫描失败。
+- 面板配置修复属于本机用户配置，不进入发布产物。
+
 ## v0.3.0
 
 - wpa_supplicant 自动探测改为直接优先连接 D-Bus（fi.w1.wpa_supplicant1），

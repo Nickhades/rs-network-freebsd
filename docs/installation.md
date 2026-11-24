@@ -14,9 +14,9 @@ netcore 提供两种一键安装入口，并在安装前选择要集成的桌面
     pkg install gtk4 dbus polkit dhcpcd wpa_supplicant-devel
 
 安装脚本会检查 /usr/local/sbin/wpa_supplicant 的 -u/D-Bus 支持和 dhcpcd，
-打印明确提示，但不会偷偷安装软件包。rc.conf 建议见 README 和
-docs/freebsd.md；不要设置 ifconfig_wlan0="WPA"，否则 rc 脚本会抢先启动
-wpa_supplicant。
+打印明确提示，但不会偷偷安装软件包。rc.conf 建议见 README 和 docs/freebsd.md：当前版本让系统 rc 启动
+wpa_supplicant（ifconfig_wlan0="WPA"）和 dhcpcd，netcore 连接并沿用；
+不要让系统只把 wlan0 up 而没有任何 wpa_supplicant。
 
 ## 选择桌面集成
 
