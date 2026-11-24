@@ -43,8 +43,7 @@ netcore 支持两种后端，并在 auto 模式下探测：
 自动探测顺序为 D-Bus 优先，失败后才尝试控制套接字。
 
 2. 控制套接字：自动查找包含控制 socket 的 /var/run/wpa_supplicant* 目录
-   （也可用 --wpa-ctrl-dir 或 WPA_CTRL_DIR 指定）。FreeBSD ports 的
-   ports 的 wpa_supplicant-devel 带 D-Bus；基本系统版本可能未编译，此时 netcore 调用 wpa_cli 并解析
+   （也可用 --wpa-ctrl-dir 或 WPA_CTRL_DIR 指定）。FreeBSD ports 的 wpa_supplicant-devel 带 D-Bus；基本系统版本可能未编译，此时 netcore 调用 wpa_cli 并解析
    status/scan_results。
 
 连接安全性映射：
@@ -61,6 +60,50 @@ AddNetwork + SelectNetwork 后等待 State=completed。netcore 按实际 API 实
 解码，不先做 UTF-8 lossy 转换，也不 trim SSID；合法 UTF-8（包括中文）原样
 显示，非 UTF-8 字节以 \xNN 显示并保留 ssid_hex。按原始字节去重，保留最强
 BSS。
+
+## rtw89 内核 panic（FreeBSD 15.1）
+
+使用 `rtw89`（例如 RTL8852BE）时，FreeBSD 15.1-RELEASE-p7 及更早内核在
+发送 Wi-Fi 数据时可能发生内核 page fault：
+
+    rtw89_core_tx_write
+    rtw89_ops_tx
+    lkpi_80211_txq_tx_one
+
+这是 FreeBSD PR 285228，修复已进入 `stable/15`。netcore 无法在用户态
+规避该内核 bug；`netcore doctor` 会检测“15.1 + rtw89”并打印警告。
+
+升级内核前：
+
+    sudo ifconfig wlan0 down
+    sudo sysrc ifconfig_wlan0="NO"
+    sudo sysrc wlans_rtw890=""
+
+改用有线网络。升级后确认：
+
+    freebsd-version -kru
+    pkg query '%n %v' FreeBSD-kernel-generic
+    netcore doctor
+
+## pkgbase 与 rc.d
+
+FreeBSD 15 可以使用 pkgbase：基础系统也由 pkg 管理，此时不要用
+`freebsd-update`。滚动 base 仓库是 `base_latest`，但升级前应：
+
+- 创建启动环境或 ZFS 快照；
+- 使用完整镜像，避免只更新内核而保留旧用户态；
+- 关闭 Wi-Fi，使用有线网络下载；
+- 保留一个可启动的旧启动环境。
+
+安装脚本会安装 rc.d 脚本。服务管理：
+
+    sudo sysrc netcore_enable=YES
+    sudo service netcore start
+    service netcore status
+    sudo service netcore stop
+
+rc.d 直接以 nohup 启动 `netcore-daemon` 并写入
+`/var/run/netcore.pid`，不依赖 daemon(8) 的 supervisor pidfile。
 
 ## DHCP
 

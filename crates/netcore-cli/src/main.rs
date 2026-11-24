@@ -431,6 +431,9 @@ async fn doctor(client: &Client, bus: BusKind) -> Result<()> {
         std::env::consts::OS,
         std::env::consts::ARCH
     );
+    if let Some(warning) = rtw89_kernel_warning() {
+        println!("  内核驱动风险: {warning}");
+    }
     println!("  D-Bus: {}", bus.as_str());
     let snapshot = client.snapshot().await?;
     println!(
@@ -514,6 +517,44 @@ async fn doctor(client: &Client, bus: BusKind) -> Result<()> {
     Ok(())
 }
 
+/// FreeBSD 15.1's rtw89 driver has a known use-after-free/page-fault bug in
+/// the TX path (FreeBSD PR 285228).  The fix landed on stable/15; keep the
+/// warning until the running kernel is at least the 15.2 branch.
+const RTW89_FIXED_FREEBSD_VERSION: u64 = 1_502_000;
+
+fn rtw89_warning(freebsd_version: u64, driver: Option<&str>) -> Option<&'static str> {
+    if freebsd_version >= RTW89_FIXED_FREEBSD_VERSION
+        || !driver.is_some_and(|driver| driver.trim() == "rtw89")
+    {
+        return None;
+    }
+    Some(
+        "检测到 FreeBSD 15.1 的 rtw89 无线驱动；该版本存在发送路径内核 panic（FreeBSD PR 285228）。请升级到包含修复的 15-STABLE/15.2 内核，或在升级前关闭 Wi-Fi 并使用有线网络。",
+    )
+}
+
+fn rtw89_kernel_warning() -> Option<&'static str> {
+    let version_output = ProcessCommand::new("uname").arg("-K").output().ok()?;
+    if !version_output.status.success() {
+        return None;
+    }
+    let freebsd_version = String::from_utf8_lossy(&version_output.stdout)
+        .trim()
+        .parse::<u64>()
+        .ok()?;
+
+    let sysctl = tools::sysctl()?;
+    let driver_output = ProcessCommand::new(sysctl)
+        .args(["-n", "dev.rtw89.0.%driver"])
+        .output()
+        .ok()?;
+    if !driver_output.status.success() {
+        return None;
+    }
+    let driver = String::from_utf8_lossy(&driver_output.stdout);
+    rtw89_warning(freebsd_version, Some(driver.trim()))
+}
+
 #[cfg(unix)]
 fn is_root() -> bool {
     // SAFETY: geteuid has no preconditions.
@@ -528,6 +569,14 @@ fn is_root() -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rtw89_warning_only_on_affected_kernels() {
+        assert!(rtw89_warning(1_501_000, Some("rtw89")).is_some());
+        assert!(rtw89_warning(1_502_000, Some("rtw89")).is_none());
+        assert!(rtw89_warning(1_501_000, Some("iwlwifi")).is_none());
+        assert!(rtw89_warning(1_501_000, None).is_none());
+    }
 
     #[test]
     fn signal_bar_has_four_slots() {

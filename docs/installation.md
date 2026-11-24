@@ -18,6 +18,17 @@ netcore 提供两种一键安装入口，并在安装前选择要集成的桌面
 wpa_supplicant（ifconfig_wlan0="WPA"）和 dhcpcd，netcore 连接并沿用；
 不要让系统只把 wlan0 up 而没有任何 wpa_supplicant。
 
+## 安装后健康检查
+
+安装并启动服务后运行：
+
+    sudo service netcore start
+    netcore doctor
+
+`doctor` 会检查 D-Bus 后端、dhcpcd、wpa_cli、Wi-Fi 硬件、权限，并在
+FreeBSD 15.1 + rtw89 环境打印已知内核 panic 警告。该警告表示需要升级
+内核，不是重新安装 netcore 能解决的问题。
+
 ## 选择桌面集成
 
 在终端直接运行脚本时，会显示序号菜单：

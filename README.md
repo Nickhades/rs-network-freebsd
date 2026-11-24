@@ -189,6 +189,39 @@ D-Bus/控制 socket 连接它们：
 `/var/run/wpa_supplicant` 为空，wpa_cli 扫描会报
 "Failed to connect to non-global ctrl_ifname"。
 
+## FreeBSD 15.1 的 rtw89 内核崩溃
+
+如果无线网卡使用 `rtw89` 驱动（例如 RTL8852BE），在
+FreeBSD 15.1-RELEASE-p7 及更早的内核上传输 Wi-Fi 数据可能触发内核
+page fault，表现为桌面突然卡死、只能强制重启。典型栈：
+
+    rtw89_core_tx_write
+    rtw89_ops_tx
+    lkpi_80211_txq_tx_one
+
+这是 FreeBSD 驱动问题，不是 netcore 用户态崩溃：
+
+- FreeBSD PR 285228
+- 修复已进入 `stable/15`，包含在 15-STABLE/15.2 分支的内核中
+- 仅升级 netcore 无法修复
+
+`netcore doctor` 会在检测到“FreeBSD 15.1 + rtw89”时打印内核驱动风险。
+处理方式：
+
+1. 升级到包含该修复的内核（15-STABLE、15.2 或后续发布补丁）。
+2. 升级前关闭 Wi-Fi，使用有线网络：
+
+       sudo ifconfig wlan0 down
+       sudo sysrc ifconfig_wlan0="NO"
+       sudo sysrc wlans_rtw890=""
+
+3. 更新内核后确认：
+
+       freebsd-version -kru
+       netcore doctor
+
+在 15.1 内核上不要频繁扫描或持续使用该无线网卡。
+
 ## CLI
 
     netcore status
@@ -253,6 +286,8 @@ D-Bus/控制 socket 连接它们：
 
 ## 已知限制
 
+- FreeBSD 15.1 的 rtw89 驱动存在已知 TX 路径内核 panic（FreeBSD PR
+  285228）；升级到含修复的 15-STABLE/15.2 内核前请使用有线网络。
 - 暂不支持 WPA-Enterprise（802.1X）与 WEP（后者出于安全原因主动拒绝）。
 - 非 UTF-8 SSID 可完整扫描、显示并保留 ssid_hex，但字符串 ConnectWifi
   接口不会猜测原始字节；主 GUI 会阻止这类连接，而不是连到错误名称。

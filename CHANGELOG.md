@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.3.5
+
+- `netcore doctor` 检测 FreeBSD 15.1 + rtw89 的已知内核 page fault
+  （FreeBSD PR 285228），提示先升级内核或改用有线网络。
+- README、FreeBSD 文档和安装文档补充 rtw89 panic、pkgbase 与 rc.d
+  服务管理说明。
+- 补充 doctor 的内核版本/驱动判断测试。
+
 ## v0.3.4
 
 - rc.d 改为 start_cmd 直接 nohup 启动 netcore-daemon 并立即写
