@@ -33,7 +33,7 @@ required_files="${procname}"
 command="/usr/sbin/daemon"
 command_args="-p ${pidfile} -o ${netcore_logfile} ${procname} --bus system ${netcore_flags}"
 start_precmd="netcore_prestart"
-start_postcmd="netcore_postcmd"
+start_postcmd="netcore_poststart"
 
 netcore_prestart()
 {

@@ -1,5 +1,10 @@
 # Changelog
 
+## v0.3.2
+
+- 修复 rc.d 脚本 start_postcmd 指向不存在的 netcore_postcmd，导致
+  `service netcore start` 报 eval 错误、没有 pidfile、status 显示未运行。
+
 ## v0.3.1
 
 - 修复 GUI 在动作失败后重新渲染快照时的 RefCell 双重借用 panic。
