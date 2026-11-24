@@ -39,22 +39,30 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - XFCE 插件在隔离 Xvfb + 私有 D-Bus 的临时面板中加载，显示 Wi-Fi 图标和
   当前 SSID “云涧”；日志确认 new item (type=object-type,
   name=netcore-plugin)。截图见 docs/screenshot-xfce-panel.png。
-- 完整 DESTDIR 安装已执行，pkg-plist 中 27 个路径全部存在，GNOME JSON、
-  KDE metadata、rc.d 语法与 XML 配置校验通过。
+- 以 --desktop all 执行的完整 DESTDIR 安装通过，pkg-plist 中 27 个路径
+  全部存在，GNOME JSON、KDE metadata、rc.d 语法与 XML 配置校验通过。
 
 ## 安装脚本验证
 
-两种安装入口均在 FreeBSD 15.1 上以 DESTDIR 暂存方式验证：
+两种安装入口和桌面选择均在 FreeBSD 15.1 上以 DESTDIR 暂存方式验证：
 
-- 自动模式：检测到 Rust/GTK 与 Qt6 环境，执行
-  cargo build --release --workspace --locked，构建 KDE 插件，安装成功。
-- 预编译模式：在 PATH=/usr/bin:/bin（无 cargo、无 qmake、无 cc）下运行，
+- 桌面菜单：在伪终端中运行，显示 1 XFCE / 2 GNOME / 3 KDE / a / 0，
+  输入 3 后只安装 KDE 目录，XFCE 与 GNOME 插件均未安装。
+- 自动模式默认（当前 XFCE）：只构建并安装 XFCE 插件，不安装 GNOME/KDE。
+- --desktop all 自动模式：构建 XFCE 与 KDE 插件，安装全部 27 个 pkg-plist
+  路径。
+- 预编译 --desktop gnome：在无编译调用的前提下只安装 GNOME 扩展，未安装
+  XFCE/KDE 文件。
+- 预编译 --desktop all：安装全部组件，27 个 pkg-plist 路径齐全。
+- --desktop none：只安装核心组件，三个桌面插件目录都不存在。
+- 预编译模式在 PATH=/usr/bin:/bin（无 cargo、无 qmake、无 cc）下成功，
   日志中没有编译调用，文件校验和与 target/release 产物一致。
-- 自动回退：在无编译环境的 PATH 下运行 auto，正确检测缺失依赖并使用预编译
-  产物完成安装。
-- 强制源码模式：同一无编译环境下正确失败，且没有留下部分安装。
-- --check 输出编译环境、KDE 环境、预编译产物状态和自动模式决策。
-- 模式参数冲突会报错，预编译 wrapper 不会启动编译。
+- 自动回退：无编译环境时按所选桌面检查预编译产物并使用；GNOME-only
+  回退只安装 GNOME 扩展。
+- --desktop=gnome 等号写法和 1/2/3 序号写法均验证通过。
+- 强制源码模式在无编译环境下正确失败，且没有留下部分安装。
+- --check 输出所选桌面、编译环境、预编译产物状态和自动模式决策。
+- 模式参数冲突会报错；预编译 wrapper 不能切入源码模式。
 
 ## 桌面扩展验证
 

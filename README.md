@@ -35,29 +35,50 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 
 依赖（FreeBSD ports）：
 
-    pkg install gtk4 xfce4-panel dbus polkit
-    # 自动编译还需要：
+    pkg install gtk4 dbus polkit
+    # 自动编译核心还需要：
     pkg install rust pkgconf
-    # KDE 集成额外需要：
+    # 选择 XFCE 集成还需要：
+    pkg install xfce4-panel
+    # 选择 KDE 集成还需要：
     pkg install qt6-base qt6-declarative qt6-tools
+    # GNOME Shell 扩展无需编译依赖
     # dhclient(8) 与 wpa_supplicant 属于 FreeBSD 基本系统
 
-安装有两种一键入口：
+安装时会先选择要安装的桌面集成：
 
-    # 1) 自动模式：检测编译环境。完整则自动编译，否则回退到预编译产物。
-    sudo ./scripts/install-freebsd.sh
+    1) XFCE Panel 插件
+    2) GNOME Shell 扩展
+    3) KDE Plasma 6 小部件
+    a) 全部   0) 不安装
 
-    # 2) 预编译模式：只安装 target/release 已有产物，不调用编译器。
-    sudo ./scripts/install-freebsd-prebuilt.sh
+也可以直接指定，不进入菜单：
 
-    # 只检测环境与产物，不编译、不安装：
-    ./scripts/install-freebsd.sh --check
+    # 两种一键入口
+    sudo ./scripts/install-freebsd.sh                         # 自动编译/安装
+    sudo ./scripts/install-freebsd-prebuilt.sh                # 只安装已有产物
 
-自动模式会检测 cargo、rustc、C 编译器、pkg-config、GTK4、GTK3 和
-libxfce4panel；Qt6 可用时同时构建 KDE 插件。编译环境不完整但
-target/release 四个核心产物齐全时，会自动改用预编译安装；两者都没有时
-打印缺失清单并退出。预编译模式要求当前 checkout 已编译过，缺少 KDE 插件
-时会跳过 KDE，但不会启动任何编译命令。
+    # 只为当前桌面安装对应插件
+    sudo ./scripts/install-freebsd.sh --desktop auto
+
+    # 只安装 XFCE，或同时安装 XFCE 和 GNOME
+    sudo ./scripts/install-freebsd.sh --desktop 1
+    sudo ./scripts/install-freebsd.sh --desktop xfce,gnome
+
+    # 预编译模式选择 GNOME；不会调用编译器
+    sudo ./scripts/install-freebsd-prebuilt.sh --desktop 2
+
+    # 只检测环境、产物和自动选择
+    ./scripts/install-freebsd.sh --check --desktop all
+
+脚本会安装核心组件（守护进程、CLI、GTK4 界面、rc.d、D-Bus、polkit），
+再只安装所选桌面插件。默认在终端中弹出序号菜单；非交互运行或指定
+--desktop auto 时，自动选择当前桌面。只有显式选择 all（菜单 a 或
+--desktop all）才会全量安装。
+
+自动编译环境也是按选择检测的：选择 XFCE 才要求 GTK3/libxfce4panel，
+选择 KDE 才要求 Qt6。编译环境不完整时会尝试对应预编译产物；选中的集成
+仍不可用则明确失败，不会静默漏装。
 
 安装后：
 
@@ -67,9 +88,10 @@ target/release 四个核心产物齐全时，会自动改用预编译安装；�
     service netcore status
     netcore status
 
-暂存安装：
+暂存或无人值守安装时请显式选择桌面：
 
-    DESTDIR=/tmp/netcore-stage ./scripts/install-freebsd.sh
+    DESTDIR=/tmp/netcore-stage ./scripts/install-freebsd.sh --desktop 1
+    DESTDIR=/tmp/netcore-stage ./scripts/install-freebsd.sh --desktop all
 
 注意：服务文件按 /usr/local 前缀编写。安装到其他 PREFIX 时需要相应修改
 D-Bus service 与 .desktop 的 Exec 路径。完整说明见
@@ -184,8 +206,8 @@ NotAuthorized。适合开发 GUI/插件：
 已在 FreeBSD 15.1-RELEASE-p7 / Rust 1.98.1 / XFCE 4.20 环境完成：
 GTK4 界面启动、D-Bus 调用、Wi-Fi 扫描、Netlink 打开与 Capsicum helper
 进入能力模式、XFCE 插件在隔离 Xvfb 面板中加载并显示当前 SSID。GNOME
-扩展与 KDE 插件通过各自的 mock D-Bus 集成测试；完整 DESTDIR 安装和
-pkg-plist 校验通过。详细记录见 docs/testing.md。
+扩展与 KDE 插件通过各自的 mock D-Bus 集成测试；桌面选择、交互菜单与
+--desktop all 完整 DESTDIR 安装均已验证。详细记录见 docs/testing.md。
 
 ## 许可
 

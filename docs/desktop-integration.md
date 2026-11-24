@@ -11,14 +11,21 @@
          --object-path /org/netcore/NetworkManager \
          --method org.netcore.NetworkManager.GetSnapshot
 2. 用户有权执行修改操作：root、wheel 组成员，或 polkit 交互认证。
-3. 安装脚本把三个扩展放到了系统目录：
+3. 安装脚本按选择把扩展放到以下系统目录：
    - XFCE: /usr/local/lib/xfce4/panel/plugins + share/xfce4/panel/plugins
    - GNOME: /usr/local/share/gnome-shell/extensions/netcore@freebsd.local
    - KDE: /usr/local/share/plasma/plasmoids/org.netcore.networkmanager
      以及 /usr/local/lib/qt6/qml/Netcore/Backend
 
-运行 ./scripts/install-freebsd.sh 会自动构建并安装三者（KDE 需要 Qt6
-开发文件，XFCE 需要 libxfce4panel 开发文件，GNOME 无需编译）。
+安装示例：
+
+    sudo ./scripts/install-freebsd.sh --desktop 1
+    sudo ./scripts/install-freebsd.sh --desktop xfce,gnome
+    sudo ./scripts/install-freebsd.sh --desktop all
+
+安装脚本提供桌面插件序号菜单，可只安装当前桌面对应项，或使用
+--desktop all 安装三者。KDE 需要 Qt6 开发文件，XFCE 需要
+libxfce4panel 开发文件，GNOME 扩展无需编译。
 
 ## XFCE Panel
 
