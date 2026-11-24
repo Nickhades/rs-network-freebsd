@@ -28,10 +28,10 @@ procname="/usr/local/sbin/netcore-daemon"
 pidfile="/var/run/netcore.pid"
 required_files="${procname}"
 
-# daemon(8) detaches, writes the child pid and captures both output streams.
-# Do not pass -f here: rc.subr would block on start.
-command="/usr/sbin/daemon"
-command_args="-p ${pidfile} -o ${netcore_logfile} ${procname} --bus system ${netcore_flags}"
+# Start the daemon directly in the background.  Using daemon(8) here made the
+# supervisor pidfile disappear early on some boots, leaving status broken.
+command="${procname}"
+start_cmd="netcore_start"
 start_precmd="netcore_prestart"
 start_postcmd="netcore_poststart"
 
@@ -40,6 +40,14 @@ netcore_prestart()
     install -d -o root -g wheel -m 755 /var/run
     touch "${netcore_logfile}"
     chmod 640 "${netcore_logfile}"
+    return 0
+}
+
+netcore_start()
+{
+    /usr/bin/nohup "${procname}" --bus system ${netcore_flags} \
+        >> "${netcore_logfile}" 2>&1 &
+    echo $! > "${pidfile}"
     return 0
 }
 

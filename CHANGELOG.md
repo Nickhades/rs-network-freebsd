@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.4
+
+- rc.d 改为 start_cmd 直接 nohup 启动 netcore-daemon 并立即写
+  /var/run/netcore.pid，不再依赖 daemon(8) supervisor pidfile；
+  service start/status/stop 已验证。
+
 ## v0.3.3
 
 - rc.d post-start 在 daemon(8) 未留下 pidfile 时，用 pgrep 查找
