@@ -73,6 +73,9 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - --check 输出所选桌面、编译环境、预编译产物状态和自动模式决策。
 - 模式参数冲突会报错；预编译 wrapper 不能切入源码模式。
 - --desktop all 的 DESTDIR 安装包含自绘应用图标，共 28 个 pkg-plist 路径。
+- 卸载脚本在同一个 DESTDIR 安装上以 --yes 执行：28 个路径全部删除，GNOME/
+  KDE/XFCE 专属空目录被清理，共享目录中的其他文件保留；重复运行幂等，
+  --dry-run 不修改文件。
 
 ## GUI 主题与自绘界面验证
 

@@ -107,6 +107,19 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 
 不要重启系统 D-Bus 服务：它可能终止当前桌面会话。
 
+## 一键卸载
+
+    # 停止/禁用服务，删除核心组件、已安装的桌面插件、D-Bus/polkit/rc.d/桌面文件
+    sudo ./scripts/uninstall-freebsd.sh --yes
+
+    # 或通过 make：
+    sudo make uninstall UNINSTALL_ARGS=--yes
+
+    # 只预览，不删除：
+    ./scripts/uninstall-freebsd.sh --dry-run
+
+日志默认保留，`--purge` 可删除 /var/log/netcore.log。DESTDIR/PREFIX 可用于
+暂存测试或自定义安装。卸载后请重启系统；不要重启系统 D-Bus 服务。
 
 暂存或无人值守安装时请显式选择桌面：
 
@@ -221,6 +234,7 @@ NotAuthorized。适合开发 GUI/插件：
     docs/authenticity.md      设备发现、SSID 原始字节与中文处理
     scripts/install-freebsd.sh
     scripts/install-freebsd-prebuilt.sh
+    scripts/uninstall-freebsd.sh
 
 ## 测试
 

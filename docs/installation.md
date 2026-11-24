@@ -188,6 +188,35 @@ plugins/ 与所需 target 产物一同打包。
 
 不要用重启 dbus 的方式加载 policy。
 
+## 卸载
+
+一键卸载会停止并禁用 netcore 服务，按 packaging/freebsd/pkg-plist 删除
+核心组件、已安装的桌面插件、D-Bus/polkit/rc.d/桌面文件和自绘图标，并移除
+rc.conf 中的 netcore_enable。
+
+    sudo ./scripts/uninstall-freebsd.sh --yes
+
+    # 或：
+    sudo make uninstall UNINSTALL_ARGS=--yes
+
+    # 只预览：
+    ./scripts/uninstall-freebsd.sh --dry-run
+
+日志默认保留；需要一并删除时加 --purge。脚本以仓库中的
+packaging/freebsd/pkg-plist 作为文件清单，因此需在 checkout 内运行。只删除
+netcore 自己的文件，不会清理共享目录中的其他软件文件；GNOME/KDE/XFCE 集成
+目录只有在删空后才会 rmdir。
+
+暂存/自定义前缀：
+
+    DESTDIR=/tmp/netcore-stage PREFIX=/usr/local \
+      ./scripts/uninstall-freebsd.sh --yes
+    PREFIX=/opt/netcore ./scripts/uninstall-freebsd.sh --yes
+
+设置 DESTDIR 时不会停止宿主服务、不会修改宿主 rc.conf。卸载完成后请重启
+系统，使 D-Bus policy/service 和桌面面板插件完全清理；不要重启系统 D-Bus
+服务。若通过 FreeBSD pkg 安装，应使用 pkg delete 而不是本脚本。
+
 ## 故障排查
 
 - 看到 [未检测到] 但仍选择：允许安装；确保之后安装对应桌面。
@@ -198,5 +227,5 @@ plugins/ 与所需 target 产物一同打包。
   QML 插件。
 - 提示需要 root：直接安装 /usr/local 需要 sudo；也可以设置 DESTDIR 暂存。
 - 无人值守却只装了核心：未传 --desktop，且没有可判断的当前桌面；请显式指定。
-- 旧安装残留：脚本只覆盖当前选择安装的路径，不会删除以前安装的其他插件；
-  需要彻底清理时对照 pkg-plist 删除。
+- 旧安装残留：使用 sudo ./scripts/uninstall-freebsd.sh --yes 一键清理；
+  也可以先用 --dry-run 查看将删除的路径。

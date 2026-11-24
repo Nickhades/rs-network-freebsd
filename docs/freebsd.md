@@ -10,8 +10,8 @@ netcore 提供自动与预编译两种一键安装方式：
 安装前可以选择桌面插件：XFCE、GNOME、KDE、全部或都不装。默认在终端中
 显示序号菜单；非交互运行会选择当前桌面。除显式选择 all 外不会全量安装。
 编译器与预编译产物检查均只针对所选项：只有选择 XFCE 才需要 GTK3，
-只有选择 KDE 才需要 Qt6。详细决策逻辑、DESTDIR/PREFIX 用法见
-docs/installation.md。
+只有选择 KDE 才需要 Qt6。一键卸载使用 scripts/uninstall-freebsd.sh；详细决策逻辑、DESTDIR/PREFIX
+用法见 docs/installation.md。
 
 ## NETLINK_ROUTE
 

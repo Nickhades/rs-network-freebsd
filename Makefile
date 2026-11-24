@@ -2,8 +2,9 @@ CARGO?=cargo
 PREFIX?=/usr/local
 DESTDIR?=
 INSTALL_ARGS?=
+UNINSTALL_ARGS?=
 
-.PHONY: all build release test check fmt clippy install install-auto install-source install-prebuilt install-check stage stage-auto stage-prebuilt clean
+.PHONY: all build release test check fmt clippy install install-auto install-source install-prebuilt install-check uninstall uninstall-check stage stage-auto stage-prebuilt clean
 
 all: build
 
@@ -48,6 +49,13 @@ stage-auto:
 
 stage-prebuilt:
 	DESTDIR=$(DESTDIR) PREFIX=$(PREFIX) ./scripts/install-freebsd-prebuilt.sh $(INSTALL_ARGS)
+
+# Destructive: run as root. Use UNINSTALL_ARGS=--yes for unattended uninstall.
+uninstall:
+	DESTDIR=$(DESTDIR) PREFIX=$(PREFIX) ./scripts/uninstall-freebsd.sh $(UNINSTALL_ARGS)
+
+uninstall-check:
+	DESTDIR=$(DESTDIR) PREFIX=$(PREFIX) ./scripts/uninstall-freebsd.sh --dry-run
 
 clean:
 	$(CARGO) clean
