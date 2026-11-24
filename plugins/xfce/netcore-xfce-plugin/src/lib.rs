@@ -447,16 +447,15 @@ fn build_device_menu(menu: &gtk::Menu, runtime: &Shared, devices: &[NetworkDevic
 
 fn show_password_dialog(runtime: Shared, ssid: String, hidden: bool) {
     let previous = runtime.borrow().snapshot.clone();
-    let ifname = previous
-        .as_ref()
-        .and_then(|snapshot| {
-            snapshot
-                .devices
-                .iter()
-                .find(|device| device.kind == DeviceKind::Wifi)
-                .map(|device| device.ifname.clone())
-        })
-        .unwrap_or_else(|| "wlan0".to_owned());
+    let Some(ifname) = previous.as_ref().and_then(|snapshot| {
+        snapshot
+            .devices
+            .iter()
+            .find(|device| device.kind == DeviceKind::Wifi)
+            .map(|device| device.ifname.clone())
+    }) else {
+        return;
+    };
     let dialog = gtk::Dialog::with_buttons(
         Some(if hidden {
             "加入隐藏网络"

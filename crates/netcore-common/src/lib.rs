@@ -7,6 +7,8 @@
 
 pub mod error;
 pub mod model;
+pub mod ssid;
+pub mod tools;
 
 pub use error::{ErrorCode, ErrorPayload};
 pub use model::{

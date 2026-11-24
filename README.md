@@ -21,15 +21,19 @@ getifaddrs(3) 与 NETLINK_ROUTE，以及 D-Bus 作为稳定的控制面。
 ![XFCE Panel 插件](docs/screenshot-xfce-panel.png)
 
 界面配色、字体、图标和加速检测说明见 [docs/ui.md](docs/ui.md)。
+SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authenticity.md)。
 
 ## 功能
 
 - Wi-Fi 扫描、连接、断开，WPA/WPA2/WPA3-SAE 密码网络
 - wpa_supplicant 自动探测：优先 fi.w1.wpa_supplicant1 D-Bus，缺失时回退
-  到 /var/run/wpa_supplicant 控制套接字（FreeBSD 默认 ports 构建常常如此）
+  到控制套接字；wpa_cli、ifconfig、dhclient 与控制目录按 PATH/环境/实际
+  目录自动发现（FreeBSD ports 构建常常没有 D-Bus 后端）
 - 连接成功后启动/接管 dhclient，断开时只停止自己启动的进程
 - 监听 NETLINK_ROUTE 的链路与地址事件，并保留 getifaddrs 周期轮询兜底
 - 设备状态、IP、MAC、MTU 与 Wi-Fi 信号/安全性统一建模
+- Wi-Fi 接口通过 ifconfig -g wlan 动态识别，不依赖 wlanN 名称
+- SSID 按原始字节保存，附带无损 ssid_hex；中文在 C locale 下仍正确显示
 - 版本化 JSON-over-D-Bus 协议，方便 GJS、QML、shell 调用
 - root + wheel 组 + polkit 三层授权；只读接口对所有本地用户开放
 - 可选 Capsicum：Netlink 解析器运行在 cap_enter(2) 后的子进程中
@@ -124,10 +128,10 @@ NotAuthorized。适合开发 GUI/插件：
     netcore status
     netcore --json status
     netcore list
-    netcore scan wlan0
-    netcore connect wlan0 --ssid "My Wi-Fi"
+    netcore scan
+    netcore connect --ssid "My Wi-Fi"
     netcore connect --ssid "My Wi-Fi" --password-stdin
-    netcore disconnect wlan0
+    netcore disconnect
     netcore wifi off
     netcore monitor
     netcore doctor
@@ -184,6 +188,8 @@ NotAuthorized。适合开发 GUI/插件：
 ## 已知限制
 
 - 暂不支持 WPA-Enterprise（802.1X）与 WEP（后者出于安全原因主动拒绝）。
+- 非 UTF-8 SSID 可完整扫描、显示并保留 ssid_hex，但字符串 ConnectWifi
+  接口不会猜测原始字节；主 GUI 会阻止这类连接，而不是连到错误名称。
 - 不持久化已保存网络；每次连接把网络临时加入 wpa_supplicant。
 - 不主动探测互联网连通性；connectivity=local 表示已有本地地址。
 - FreeBSD rtnetlink 仍在演进，NETLINK_ROUTE 只作为加速路径，轮询兜底
@@ -204,6 +210,7 @@ NotAuthorized。适合开发 GUI/插件：
     packaging/freebsd         rc.d、D-Bus、polkit、port 骨架
     docs/installation.md      两种安装模式与故障排查
     docs/ui.md                主题、字体、自绘图标与加速检测
+    docs/authenticity.md      设备发现、SSID 原始字节与中文处理
     scripts/install-freebsd.sh
     scripts/install-freebsd-prebuilt.sh
 
@@ -218,7 +225,8 @@ GTK4 界面启动、D-Bus 调用、Wi-Fi 扫描、Netlink 打开与 Capsicum hel
 进入能力模式、XFCE 插件在隔离 Xvfb 面板中加载并显示当前 SSID。GNOME
 扩展与 KDE 插件通过各自的 mock D-Bus 集成测试；桌面选择、交互菜单与
 --desktop all 完整 DESTDIR 安装均已验证；GUI 深/浅主题切换与自绘图标已实机截图。
-详细记录见 docs/testing.md。
+36 个单元测试通过；另在 LC_ALL=C LANG=C 下验证 daemon/GUI 仍显示中文 SSID，
+并通过 ssid_hex 保留原始字节。详细记录见 docs/testing.md。
 
 ## 许可
 

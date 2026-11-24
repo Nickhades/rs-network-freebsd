@@ -29,6 +29,11 @@ unknown JSON fields. Removing or renaming a field requires a protocol bump.
 | SetDeviceEnabled | (s ifname, b enabled) -> s | manage | Administrative up/down; enabling Ethernet starts DHCP. |
 | SetWifiEnabled | (b enabled) -> () | manage | Global Wi-Fi preference; disconnects Wi-Fi when disabled. |
 
+ScanResult/NetworkDevice JSON contains both ssid (UTF-8 display text, with
+Chinese preserved) and ssid_hex (exact SSID octets). ConnectWifi accepts a
+UTF-8 ssid string; non-UTF-8 SSIDs can be inspected via ssid_hex but are not
+safely connectable through this string-only method (the GUI blocks them).
+
 A failing method returns a D-Bus error whose name begins with
 org.netcore.NetworkManager.Error. (for example
 org.netcore.NetworkManager.Error.NotAuthorized). Messages are human-readable

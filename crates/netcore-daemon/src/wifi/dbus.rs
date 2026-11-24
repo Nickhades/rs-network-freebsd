@@ -9,6 +9,7 @@ use std::collections::HashMap;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use netcore_common::ssid::display_and_hex;
 use netcore_common::{Security, WifiNetwork};
 use zbus::names::BusName;
 use zbus::{Connection, OwnedObjectPath, OwnedVariant, Proxy, Variant};
@@ -94,16 +95,17 @@ impl DbusWifi {
             .get_property::<OwnedObjectPath>("CurrentBSS")
             .await
             .ok();
-        let (ssid, bssid) = if let Some(path) = current_bss
+        let (ssid, ssid_hex, bssid) = if let Some(path) = current_bss
             && path.as_str() != "/"
         {
-            self.bss_identity(&path).await.unwrap_or((None, None))
+            self.bss_identity(&path).await.unwrap_or((None, None, None))
         } else {
-            (None, None)
+            (None, None, None)
         };
         Ok(WifiStatus {
             connected,
             ssid,
+            ssid_hex,
             bssid,
             state,
         })
@@ -158,20 +160,22 @@ impl DbusWifi {
     async fn bss_identity(
         &self,
         path: &OwnedObjectPath,
-    ) -> Result<(Option<String>, Option<String>)> {
+    ) -> Result<(Option<String>, Option<String>, Option<String>)> {
         let bss = self.bss(path).await?;
-        let ssid = bss
-            .get_property::<Vec<u8>>("SSID")
-            .await
-            .ok()
-            .map(|bytes| String::from_utf8_lossy(&bytes).into_owned())
-            .filter(|ssid| !ssid.is_empty());
+        let raw_ssid = bss.get_property::<Vec<u8>>("SSID").await.ok();
+        let (ssid, ssid_hex) = match raw_ssid {
+            Some(bytes) if !bytes.is_empty() => {
+                let (display, hex) = display_and_hex(&bytes);
+                (Some(display), hex)
+            }
+            _ => (None, None),
+        };
         let bssid = bss
             .get_property::<Vec<u8>>("BSSID")
             .await
             .ok()
             .map(|bytes| format_mac(&bytes));
-        Ok((ssid, bssid))
+        Ok((ssid, ssid_hex, bssid))
     }
 
     async fn bss_network(
@@ -187,7 +191,7 @@ impl DbusWifi {
         if ssid.is_empty() {
             return Ok(None);
         }
-        let ssid = String::from_utf8_lossy(&ssid).into_owned();
+        let (ssid, ssid_hex) = display_and_hex(&ssid);
         let bssid = bss
             .get_property::<Vec<u8>>("BSSID")
             .await
@@ -217,6 +221,7 @@ impl DbusWifi {
         };
         Ok(Some(WifiNetwork {
             ssid,
+            ssid_hex,
             bssid,
             signal,
             frequency,

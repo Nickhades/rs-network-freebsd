@@ -116,7 +116,11 @@ impl Security {
 /// One visible Wi-Fi network, collapsed across BSSIDs.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct WifiNetwork {
+    /// Display text: exact UTF-8 when valid, otherwise a \xNN rendering.
     pub ssid: String,
+    /// Exact SSID octets in lowercase hex.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssid_hex: Option<String>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub bssid: Option<String>,
     /// Signal strength in dBm (typically -95..=-20).
@@ -166,8 +170,12 @@ pub struct NetworkDevice {
     /// IPv6 addresses in CIDR notation.
     #[serde(default)]
     pub ipv6: Vec<String>,
+    /// Display text: exact UTF-8 when valid, otherwise a \xNN rendering.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub ssid: Option<String>,
+    /// Exact active SSID octets in lowercase hex.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ssid_hex: Option<String>,
     /// Cached scan results for Wi-Fi devices.
     #[serde(default)]
     pub networks: Vec<WifiNetwork>,
@@ -349,8 +357,10 @@ mod tests {
                 ipv4: vec!["192.0.2.10/24".to_owned()],
                 ipv6: vec![],
                 ssid: Some("test".to_owned()),
+                ssid_hex: Some("74657374".to_owned()),
                 networks: vec![WifiNetwork {
                     ssid: "test".to_owned(),
+                    ssid_hex: Some("74657374".to_owned()),
                     bssid: Some("00:11:22:33:44:55".to_owned()),
                     signal: -52,
                     frequency: 2412,
@@ -370,6 +380,7 @@ mod tests {
     fn quality_is_clamped() {
         let mut network = WifiNetwork {
             ssid: String::new(),
+            ssid_hex: None,
             bssid: None,
             signal: -42,
             frequency: 0,

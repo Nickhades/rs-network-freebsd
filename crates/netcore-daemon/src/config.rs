@@ -14,21 +14,21 @@ pub struct Config {
     #[arg(long, value_enum, default_value_t = WpaChoice::Auto)]
     pub wpa_backend: WpaChoice,
 
-    /// Directory holding wpa_supplicant control sockets.
-    #[arg(long, default_value = "/var/run/wpa_supplicant")]
-    pub wpa_ctrl_dir: PathBuf,
+    /// Directory holding wpa_supplicant control sockets. Default = auto-detect.
+    #[arg(long)]
+    pub wpa_ctrl_dir: Option<PathBuf>,
 
-    /// Path to wpa_cli.
-    #[arg(long, default_value = "/usr/sbin/wpa_cli")]
-    pub wpa_cli: PathBuf,
+    /// Path to wpa_cli. Default = search PATH and common FreeBSD locations.
+    #[arg(long)]
+    pub wpa_cli: Option<PathBuf>,
 
-    /// Path to dhclient.
-    #[arg(long, default_value = "/sbin/dhclient")]
-    pub dhclient: PathBuf,
+    /// Path to dhclient. Default = search PATH and common FreeBSD locations.
+    #[arg(long)]
+    pub dhclient: Option<PathBuf>,
 
-    /// Path to ifconfig.
-    #[arg(long, default_value = "/sbin/ifconfig")]
-    pub ifconfig: PathBuf,
+    /// Path to ifconfig. Default = search PATH and common FreeBSD locations.
+    #[arg(long)]
+    pub ifconfig: Option<PathBuf>,
 
     /// DHCP client timeout in seconds.
     #[arg(long, default_value_t = 45)]

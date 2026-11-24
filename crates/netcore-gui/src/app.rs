@@ -14,6 +14,7 @@ use gtk4 as gtk;
 use gtk4::gio;
 use gtk4::glib;
 use netcore_client::BusKind;
+use netcore_common::ssid::is_utf8_hex;
 use netcore_common::{
     DeviceKind, DeviceState, ManagerSnapshot, ManagerState, NetworkDevice, Security, WifiNetwork,
 };
@@ -696,8 +697,18 @@ fn build_network_row(
     let ifname = device.ifname.clone();
     let ssid_text = network.ssid.clone();
     let secured = network.security != Security::Open;
+    let connectable = network.ssid_hex.as_deref().is_none_or(is_utf8_hex);
     let window = ui.window.clone();
+    let ui_for_click = Rc::clone(ui);
     row.connect_clicked(move |_| {
+        if !connectable {
+            show_banner(
+                &ui_for_click,
+                true,
+                "该 SSID 包含非 UTF-8 字节；扫描名称已保留，请用 wpa_supplicant 配置连接",
+            );
+            return;
+        }
         if secured {
             show_connect_dialog(
                 &window,

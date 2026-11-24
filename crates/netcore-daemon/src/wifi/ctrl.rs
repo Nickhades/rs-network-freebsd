@@ -8,10 +8,11 @@ use std::path::PathBuf;
 use std::time::Duration;
 
 use anyhow::{Context, Result, bail};
+use netcore_common::ssid::{display_and_hex, same_ssid};
 use netcore_common::{Security, WifiNetwork};
 use tokio::process::Command;
 
-use super::{WifiStatus, deduplicate, escape_wpa_value, security_from_flags, unescape_wpa};
+use super::{WifiStatus, deduplicate, escape_wpa_value, security_from_flags, unescape_wpa_bytes};
 
 struct NetworkParams<'a> {
     ssid: &'a str,
@@ -35,28 +36,30 @@ impl CtrlWifi {
 
     #[must_use]
     pub fn usable(&self) -> bool {
-        if !self.wpa_cli.is_file() {
-            return false;
-        }
-        self.ctrl_dir.is_dir()
+        self.wpa_cli.is_file() && (self.ctrl_dir.as_os_str().is_empty() || self.ctrl_dir.is_dir())
     }
 
-    async fn run(&self, ifname: &str, args: &[&str]) -> Result<String> {
+    async fn run_bytes(&self, ifname: &str, args: &[&str]) -> Result<Vec<u8>> {
+        let mut command = Command::new(&self.wpa_cli);
+        if !self.ctrl_dir.as_os_str().is_empty() {
+            command.arg("-p").arg(&self.ctrl_dir);
+        }
         let output = tokio::time::timeout(
             Duration::from_secs(20),
-            Command::new(&self.wpa_cli)
+            command
                 .arg("-i")
                 .arg(ifname)
                 .args(args)
                 .env("LC_ALL", "C")
+                .env("LANG", "C")
                 .output(),
         )
         .await
         .with_context(|| format!("wpa_cli {} 超时", args.join(" ")))?
         .with_context(|| format!("无法执行 {}", self.wpa_cli.display()))?;
-        let stdout = String::from_utf8_lossy(&output.stdout).into_owned();
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_owned();
         if !output.status.success() {
+            let stdout = String::from_utf8_lossy(&output.stdout);
             bail!(
                 "wpa_cli 失败 ({}): {}",
                 output.status,
@@ -67,11 +70,19 @@ impl CtrlWifi {
                 }
             );
         }
-        let trimmed = stdout.trim();
-        if trimmed.starts_with("FAIL") {
-            bail!("wpa_supplicant: {trimmed}");
+        let trimmed = trim_ascii(&output.stdout);
+        if trimmed.starts_with(b"FAIL") {
+            bail!(
+                "wpa_supplicant: {}",
+                String::from_utf8_lossy(trimmed).trim()
+            );
         }
-        Ok(stdout)
+        Ok(output.stdout)
+    }
+
+    async fn run(&self, ifname: &str, args: &[&str]) -> Result<String> {
+        let stdout = self.run_bytes(ifname, args).await?;
+        Ok(String::from_utf8_lossy(&stdout).into_owned())
     }
 
     async fn exec_values(&self, ifname: &str, args: &[String]) -> Result<String> {
@@ -80,7 +91,7 @@ impl CtrlWifi {
     }
 
     pub async fn status(&self, ifname: &str) -> Result<WifiStatus> {
-        let raw = self.run(ifname, &["status"]).await?;
+        let raw = self.run_bytes(ifname, &["status"]).await?;
         Ok(parse_status(&raw))
     }
 
@@ -95,13 +106,17 @@ impl CtrlWifi {
         }
         tokio::time::sleep(Duration::from_millis(2200)).await;
         let status = self.status(ifname).await.ok();
-        let raw = self.run(ifname, &["scan_results"]).await?;
+        let raw = self.run_bytes(ifname, &["scan_results"]).await?;
         let mut networks = parse_scan_results(&raw);
         if let Some(status) = status {
             for network in &mut networks {
                 network.connected = status.connected
-                    && (status.ssid.as_deref() == Some(network.ssid.as_str())
-                        || (status.bssid.is_some() && status.bssid == network.bssid));
+                    && (same_ssid(
+                        status.ssid.as_deref().unwrap_or_default(),
+                        status.ssid_hex.as_deref(),
+                        &network.ssid,
+                        network.ssid_hex.as_deref(),
+                    ) || (status.bssid.is_some() && status.bssid == network.bssid));
             }
         }
         Ok(deduplicate(networks))
@@ -237,66 +252,88 @@ impl CtrlWifi {
     }
 }
 
-fn parse_status(raw: &str) -> WifiStatus {
-    let mut fields = std::collections::HashMap::new();
-    for line in raw.lines() {
-        if let Some((key, value)) = line.split_once('=') {
-            fields.insert(key.trim(), value.trim().to_owned());
+fn parse_status(raw: &[u8]) -> WifiStatus {
+    let mut state = "UNKNOWN".to_owned();
+    let mut ssid = None;
+    let mut ssid_hex = None;
+    let mut bssid = None;
+
+    for line in raw.split(|byte| *byte == b'\n') {
+        let line = strip_cr(line);
+        let Some(separator) = line.iter().position(|byte| *byte == b'=') else {
+            continue;
+        };
+        let key = &line[..separator];
+        let value = &line[separator + 1..];
+        match key {
+            b"wpa_state" => {
+                state = String::from_utf8_lossy(trim_ascii(value)).into_owned();
+            }
+            b"ssid" => {
+                let decoded = unescape_wpa_bytes(value);
+                if !decoded.is_empty() {
+                    let (display, hex) = display_and_hex(&decoded);
+                    ssid = Some(display);
+                    ssid_hex = hex;
+                }
+            }
+            b"bssid" => {
+                let text = String::from_utf8_lossy(trim_ascii(value)).into_owned();
+                if !text.is_empty() {
+                    bssid = Some(text.to_ascii_lowercase());
+                }
+            }
+            _ => {}
         }
     }
-    let state = fields
-        .get("wpa_state")
-        .cloned()
-        .unwrap_or_else(|| "UNKNOWN".to_owned());
-    let ssid = fields
-        .get("ssid")
-        .map(|value| unescape_wpa(value))
-        .filter(|value| !value.is_empty());
-    let bssid = fields.get("bssid").cloned();
+
     WifiStatus {
         connected: state.eq_ignore_ascii_case("COMPLETED"),
         ssid,
+        ssid_hex,
         bssid,
         state,
     }
 }
 
-fn parse_scan_results(raw: &str) -> Vec<WifiNetwork> {
+fn parse_scan_results(raw: &[u8]) -> Vec<WifiNetwork> {
     let mut networks = Vec::new();
-    for line in raw.lines() {
-        let line = line.trim_end();
-        if line.is_empty() || line.starts_with("bssid /") {
+    for line in raw.split(|byte| *byte == b'\n') {
+        let line = strip_cr(line);
+        if line.is_empty() || line.starts_with(b"bssid /") {
             continue;
         }
-        let mut fields = line.split('\t');
-        let Some(bssid) = fields.next() else {
+        // Split only the four ASCII columns. Everything after the fourth tab
+        // is the SSID, so literal tabs are not silently discarded.
+        let fields: Vec<&[u8]> = line.splitn(5, |byte| *byte == b'\t').collect();
+        if fields.len() != 5 {
             continue;
-        };
-        let Some(frequency) = fields
-            .next()
-            .and_then(|value| value.trim().parse::<u32>().ok())
+        }
+        let bssid = String::from_utf8_lossy(trim_ascii(fields[0]))
+            .trim()
+            .to_ascii_lowercase();
+        let Ok(frequency) = std::str::from_utf8(trim_ascii(fields[1]))
+            .unwrap_or_default()
+            .parse::<u32>()
         else {
             continue;
         };
-        let Some(signal) = fields
-            .next()
-            .and_then(|value| value.trim().parse::<i32>().ok())
+        let Ok(signal) = std::str::from_utf8(trim_ascii(fields[2]))
+            .unwrap_or_default()
+            .parse::<i32>()
         else {
             continue;
         };
-        let Some(flags) = fields.next() else {
-            continue;
-        };
-        let Some(ssid_raw) = fields.next() else {
-            continue;
-        };
-        let ssid = unescape_wpa(ssid_raw);
-        if ssid.trim().is_empty() {
+        let flags = std::str::from_utf8(fields[3]).unwrap_or_default();
+        let ssid_bytes = unescape_wpa_bytes(fields[4]);
+        if ssid_bytes.is_empty() {
             continue;
         }
+        let (ssid, ssid_hex) = display_and_hex(&ssid_bytes);
         networks.push(WifiNetwork {
             ssid,
-            bssid: Some(bssid.trim().to_ascii_lowercase()),
+            ssid_hex,
+            bssid: Some(bssid),
             signal,
             frequency,
             security: security_from_flags(flags),
@@ -306,6 +343,20 @@ fn parse_scan_results(raw: &str) -> Vec<WifiNetwork> {
     networks
 }
 
+fn strip_cr(line: &[u8]) -> &[u8] {
+    line.strip_suffix(b"\r").unwrap_or(line)
+}
+
+fn trim_ascii(mut bytes: &[u8]) -> &[u8] {
+    while bytes.first().is_some_and(|byte| byte.is_ascii_whitespace()) {
+        bytes = &bytes[1..];
+    }
+    while bytes.last().is_some_and(|byte| byte.is_ascii_whitespace()) {
+        bytes = &bytes[..bytes.len() - 1];
+    }
+    bytes
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -313,19 +364,42 @@ mod tests {
     #[test]
     fn parses_status() {
         let status = parse_status(
-            "bssid=06:8b:42:2a:17:ea\nfreq=2412\nssid=\\xe4\\xba\\x91\nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\n",
+            b"bssid=06:8b:42:2a:17:ea\nfreq=2412\nssid=\\xe4\\xba\\x91\\xe6\\xb6\\xa7  \nkey_mgmt=WPA2-PSK\nwpa_state=COMPLETED\n",
         );
         assert!(status.connected);
-        assert_eq!(status.ssid.as_deref(), Some("云"));
+        assert_eq!(status.ssid.as_deref(), Some("云涧  "));
+        assert_eq!(status.ssid_hex.as_deref(), Some("e4ba91e6b6a72020"));
     }
 
     #[test]
     fn parses_scan_results() {
-        let raw = "bssid / frequency / signal level / flags / ssid\n06:8b:42:2a:17:ea\t2412\t-37\t[WPA2-PSK-CCMP][ESS]\t\\xe4\\xba\\x91\\xe6\\xb6\\xa7\nff:ff:ff:ff:ff:ff\t5180\t-70\t[ESS]\tGuest\n";
+        let raw = b"bssid / frequency / signal level / flags / ssid\n06:8b:42:2a:17:ea\t2412\t-37\t[WPA2-PSK-CCMP][ESS]\t\\xe4\\xba\\x91\\xe6\\xb6\\xa7\nff:ff:ff:ff:ff:ff\t5180\t-70\t[ESS]\tGuest\n";
         let networks = parse_scan_results(raw);
         assert_eq!(networks.len(), 2);
         assert_eq!(networks[0].ssid, "云涧");
+        assert_eq!(networks[0].ssid_hex.as_deref(), Some("e4ba91e6b6a7"));
         assert_eq!(networks[0].security, Security::Wpa2Psk);
         assert_eq!(networks[1].security, Security::Open);
+    }
+
+    #[test]
+    fn keeps_spaces_and_tabs_in_ssid() {
+        let raw = b"00:11:22:33:44:55\t2412\t-40\t[ESS]\t  spaced\tname  \n";
+        let networks = parse_scan_results(raw);
+        assert_eq!(networks.len(), 1);
+        assert_eq!(networks[0].ssid, "  spaced\tname  ");
+        assert_eq!(
+            networks[0].ssid_hex.as_deref(),
+            Some("2020737061636564096e616d652020")
+        );
+    }
+
+    #[test]
+    fn preserves_non_utf8_ssid_bytes() {
+        let raw = b"00:11:22:33:44:55\t2412\t-40\t[ESS]\t\\xff\\x00a\n";
+        let networks = parse_scan_results(raw);
+        assert_eq!(networks.len(), 1);
+        assert_eq!(networks[0].ssid, "\\xff\\x00\\x61");
+        assert_eq!(networks[0].ssid_hex.as_deref(), Some("ff0061"));
     }
 }

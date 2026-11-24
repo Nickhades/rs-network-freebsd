@@ -2,6 +2,7 @@
 
 use std::sync::{Arc, Mutex};
 
+use netcore_common::ssid::display_and_hex;
 use netcore_common::{Security, WifiNetwork};
 
 use super::WifiStatus;
@@ -25,12 +26,16 @@ impl MockWifi {
             .expect("mock wifi mutex poisoned")
             .clone();
         match connected {
-            Some(ssid) => WifiStatus {
-                connected: true,
-                ssid: Some(ssid),
-                bssid: Some("02:00:00:00:00:01".to_owned()),
-                state: "COMPLETED".to_owned(),
-            },
+            Some(ssid) => {
+                let (display, hex) = display_and_hex(ssid.as_bytes());
+                WifiStatus {
+                    connected: true,
+                    ssid: Some(display),
+                    ssid_hex: hex,
+                    bssid: Some("02:00:00:00:00:01".to_owned()),
+                    state: "COMPLETED".to_owned(),
+                }
+            }
             None => WifiStatus::disconnected(),
         }
     }
@@ -40,6 +45,7 @@ impl MockWifi {
         vec![
             WifiNetwork {
                 ssid: "netcore-demo".to_owned(),
+                ssid_hex: Some("6e6574636f72652d64656d6f".to_owned()),
                 bssid: Some("02:00:00:00:00:01".to_owned()),
                 signal: -42,
                 frequency: 5180,
@@ -51,6 +57,7 @@ impl MockWifi {
             },
             WifiNetwork {
                 ssid: "FreeBSD-Guest".to_owned(),
+                ssid_hex: Some("467265654253442d4775657374".to_owned()),
                 bssid: Some("02:00:00:00:00:02".to_owned()),
                 signal: -67,
                 frequency: 2412,

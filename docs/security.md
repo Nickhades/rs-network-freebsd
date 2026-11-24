@@ -39,7 +39,9 @@ session 总线模式为了开发方便信任调用者；生产必须使用系统
 
 所有外部命令都通过 tokio::process::Command 以参数数组执行，不经过 shell；
 接口名先通过白名单校验（字母数字、下划线、点、连字符）并限制 IFNAMSIZ。
-SSID 会校验长度不超过 32 字节；控制套接字字符串按 wpa_supplicant 规则转义。
+SSID 会校验长度不超过 32 字节；扫描结果按原始字节保存（ssid_hex），
+控制套接字字符串按 wpa_supplicant 规则转义，不对中文或非 UTF-8 字节做
+有损替换。
 
 ## Capsicum
 

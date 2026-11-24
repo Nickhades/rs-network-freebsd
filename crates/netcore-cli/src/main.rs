@@ -9,6 +9,7 @@ use futures_util::StreamExt;
 use netcore_client::{BusKind, Client};
 use netcore_common::{
     DeviceKind, DeviceState, ManagerSnapshot, NetworkDevice, ScanResult, Security, WifiNetwork,
+    tools,
 };
 
 #[derive(Debug, Parser)]
@@ -460,24 +461,44 @@ async fn doctor(client: &Client, bus: BusKind) -> Result<()> {
             "普通用户（只读；修改需要 root 或 polkit）"
         }
     );
-    for path in ["/sbin/ifconfig", "/sbin/dhclient", "/usr/sbin/wpa_cli"] {
-        println!(
-            "  {}: {}",
-            path,
-            if std::path::Path::new(path).exists() {
-                "存在"
-            } else {
-                "缺失"
-            }
-        );
+    for (label, found) in [
+        ("ifconfig", tools::ifconfig()),
+        ("dhclient", tools::dhclient()),
+        ("wpa_cli", tools::wpa_cli()),
+    ] {
+        match found {
+            Some(path) => println!("  {label}: {}（存在）", path.display()),
+            None => println!("  {label}: 未找到"),
+        }
     }
-    let wpa = ProcessCommand::new("/usr/sbin/wpa_cli")
-        .args(["-i", "wlan0", "status"])
-        .output();
-    match wpa {
-        Ok(output) if output.status.success() => println!("  wpa_supplicant 控制套接字: 可访问"),
-        Ok(_) => println!("  wpa_supplicant 控制套接字: 不可访问或无 Wi-Fi"),
-        Err(_) => println!("  wpa_supplicant 控制套接字: wpa_cli 不可执行"),
+
+    let wifi_ifnames: Vec<&str> = snapshot
+        .devices
+        .iter()
+        .filter(|device| device.kind == DeviceKind::Wifi)
+        .map(|device| device.ifname.as_str())
+        .collect();
+    if wifi_ifnames.is_empty() {
+        println!("  wpa_supplicant 控制套接字: 未发现 Wi-Fi 接口");
+    } else if let Some(wpa_cli) = tools::wpa_cli() {
+        let mut state = "不可访问";
+        for ifname in wifi_ifnames {
+            let output = ProcessCommand::new(&wpa_cli)
+                .args(["-i", ifname, "status"])
+                .env("LC_ALL", "C")
+                .env("LANG", "C")
+                .output();
+            if output.is_ok_and(|output| output.status.success()) {
+                state = "可访问";
+                break;
+            }
+        }
+        println!(
+            "  wpa_supplicant 控制套接字: {state}（{}）",
+            wpa_cli.display()
+        );
+    } else {
+        println!("  wpa_supplicant 控制套接字: wpa_cli 不可执行");
     }
     if snapshot.devices.is_empty() {
         bail!("系统没有可管理的网络接口");
@@ -533,6 +554,7 @@ mod tests {
                     ipv4: vec![],
                     ipv6: vec![],
                     ssid: None,
+                    ssid_hex: None,
                     networks: vec![],
                     last_error: None,
                 },
@@ -548,6 +570,7 @@ mod tests {
                     ipv4: vec![],
                     ipv6: vec![],
                     ssid: None,
+                    ssid_hex: None,
                     networks: vec![],
                     last_error: None,
                 },

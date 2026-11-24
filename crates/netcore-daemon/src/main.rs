@@ -24,6 +24,7 @@ use tracing_subscriber::EnvFilter;
 use crate::auth::Authorizer;
 use crate::dbus::DaemonService;
 use crate::wifi::WifiService;
+use netcore_common::tools::{dhclient, find_wpa_ctrl_dir, ifconfig, is_executable, wpa_cli};
 
 fn main() {
     let config = Config::parse();
@@ -53,6 +54,52 @@ fn main() {
     }
 }
 
+fn resolve_tools(config: &mut Config) -> Result<()> {
+    if config.wpa_cli.is_none() {
+        config.wpa_cli = wpa_cli();
+    }
+    if let Some(path) = &config.wpa_cli
+        && !is_executable(path)
+    {
+        bail!("wpa_cli 不可执行：{}", path.display());
+    }
+
+    config.wpa_ctrl_dir = find_wpa_ctrl_dir(config.wpa_ctrl_dir.clone());
+
+    if config.ifconfig.is_none() {
+        config.ifconfig =
+            Some(ifconfig().context("未找到 ifconfig；请用 --ifconfig 或 IFCONFIG 指定")?);
+    }
+    let ifconfig_path = config.ifconfig.clone().context("ifconfig 路径未解析")?;
+    if !is_executable(&ifconfig_path) {
+        bail!("ifconfig 不可执行：{}", ifconfig_path.display());
+    }
+
+    if config.dhclient.is_none() {
+        config.dhclient =
+            Some(dhclient().context("未找到 dhclient；请用 --dhclient 或 DHCLIENT 指定")?);
+    }
+    let dhclient_path = config.dhclient.clone().context("dhclient 路径未解析")?;
+    if !is_executable(&dhclient_path) {
+        bail!("dhclient 不可执行：{}", dhclient_path.display());
+    }
+
+    tracing::info!(
+        ifconfig = %ifconfig_path.display(),
+        dhclient = %dhclient_path.display(),
+        wpa_cli = %config
+            .wpa_cli
+            .as_ref()
+            .map_or_else(|| "未找到".to_owned(), |path| path.display().to_string()),
+        wpa_ctrl_dir = %config
+            .wpa_ctrl_dir
+            .as_ref()
+            .map_or_else(|| "wpa_cli 默认".to_owned(), |path| path.display().to_string()),
+        "工具路径"
+    );
+    Ok(())
+}
+
 fn init_logging(config: &Config) {
     let filter = EnvFilter::try_new(config.log_filter())
         .unwrap_or_else(|_| EnvFilter::new("netcore_daemon=info,zbus=warn"));
@@ -63,11 +110,12 @@ fn init_logging(config: &Config) {
         .try_init();
 }
 
-async fn run(config: Config) -> Result<()> {
+async fn run(mut config: Config) -> Result<()> {
+    resolve_tools(&mut config)?;
     let wifi = WifiService::detect(
         config.wpa_backend,
-        config.wpa_ctrl_dir.clone(),
-        config.wpa_cli.clone(),
+        config.wpa_ctrl_dir.clone().unwrap_or_default(),
+        config.wpa_cli.clone().unwrap_or_default(),
     )
     .await;
     tracing::info!(

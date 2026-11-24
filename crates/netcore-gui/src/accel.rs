@@ -7,6 +7,8 @@
 
 use std::process::Command;
 
+use netcore_common::tools;
+
 #[derive(Debug, Clone)]
 pub struct AccelInfo {
     pub summary: String,
@@ -72,7 +74,8 @@ fn gpu_available() -> bool {
 }
 
 fn gpu_name() -> Option<String> {
-    let output = Command::new("/usr/sbin/pciconf")
+    let pciconf = tools::pciconf()?;
+    let output = Command::new(pciconf)
         .arg("-lv")
         .env("LC_ALL", "C")
         .output()
@@ -98,7 +101,8 @@ fn active_pci_id() -> Option<String> {
 }
 
 fn sysctl(key: &str) -> Option<String> {
-    let output = Command::new("/sbin/sysctl")
+    let sysctl = tools::sysctl()?;
+    let output = Command::new(sysctl)
         .arg("-n")
         .arg(key)
         .env("LC_ALL", "C")

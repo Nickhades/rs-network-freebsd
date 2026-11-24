@@ -36,6 +36,7 @@ connectivity is one of: none, local, unknown.
       "ipv4": ["192.168.2.226/24"],
       "ipv6": ["fe80::1/64"],
       "ssid": "example",
+      "ssid_hex": "6578616d706c65",
       "networks": [WifiNetwork],
       "last_error": null
     }
@@ -48,12 +49,18 @@ ip_config, connected, disconnecting, failed.
 
     {
       "ssid": "example",
+      "ssid_hex": "6578616d706c65",
       "bssid": "06:8b:42:2a:17:ea",
       "signal": -52,
       "frequency": 2412,
       "security": "wpa2_psk",
       "connected": true
     }
+
+ssid is display text: valid UTF-8 (including Chinese) is exact; invalid octets
+are rendered as \xNN without replacement characters. ssid_hex is the exact
+SSID octets in lowercase hex and is authoritative. It is optional for backward
+compatibility with older daemons.
 
 security is one of: open, wep, wpa_psk, wpa2_psk, wpa3_sae, enterprise,
 unknown.

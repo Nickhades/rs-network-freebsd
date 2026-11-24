@@ -10,10 +10,10 @@ GTK4 4.20.4，GNOME Shell 47.10，Plasma 6.7.5，Qt 6.11.2。本机 wlan0
     cargo clippy --workspace --all-targets -- -D warnings
     cargo test --workspace
 
-结果：format 与 clippy 无警告；27 个单元测试全部通过（common 3、CLI 2、
-daemon 19、GUI 3）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
+结果：format 与 clippy 无警告；36 个单元测试全部通过（common 10、CLI 2、
+daemon 21、GUI 3）。覆盖模型 JSON 往返、默认安全性枚举、接口分类与 MAC 格式化、
 Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
-转义、DHCP 状态、CLI 目标选择。
+转义、DHCP 状态、CLI 目标选择、SSID 原始字节/hex、工具发现。
 
 ## 实际运行（无 root）
 
@@ -29,7 +29,15 @@ Netlink 消息解析与 socket bind、wpa_cli status/scan_results 解析、SSID
 - 自动探测到 ctrl 后端（本机 wpa_supplicant 没有 D-Bus 服务）。
 - NETLINK_ROUTE 监听启动；Capsicum 模式下 helper 进入能力模式（进程状态
   显示 SC），快照 netlink_active=true。
-- ScanWifi 返回 9 个真实网络，SSID 中文解码正确，信号排序正确。
+- ScanWifi 返回真实网络列表（测试时 8–9 个，随环境变化），SSID 中文解码正确，
+  信号排序正确。
+- 在 LC_ALL=C LANG=C 下启动 session daemon，scan --json 返回中文 SSID
+  “云涧”/hex e4ba91e6b6a7 与“包厢”/hex e58c85e58ea2；GUI 同样以 C
+  locale 启动并正常显示中文，未依赖系统中文 locale。
+- 控制套接字解析保留首尾空格、制表符与非 UTF-8 字节；无效字节以 \xNN
+  显示，ssid_hex 保持原始内容，不发生 U+FFFD 替换。
+- 无线接口通过 ifconfig -g wlan 分组识别；单元测试使用 radio0 验证不依赖
+  wlan 前缀。守护进程日志显示实际发现的 ifconfig/dhclient/wpa_cli 路径。
 - CLI status/list/scan/doctor/monitor 正常；monitor 连续收到初始快照和
   扫描后的 SnapshotChanged。
 - 非 root 修改操作返回 NotAuthorized，未触碰网络。
@@ -143,3 +151,12 @@ XFCE：
 
     cargo fmt --check
     cargo clippy --workspace --all-targets -- -D warnings
+## SSID 与发现真实性验证
+
+- LC_ALL=C LANG=C 的 session daemon 扫描结果包含中文 ssid 和精确 ssid_hex；
+  连接状态仍按 ssid_hex 匹配。
+- GUI 在 LC_ALL=C 下仍显示中文 SSID。
+- 单元测试覆盖中文转义、无效 UTF-8、首尾空格、制表符、\xNN、hex 去重。
+- CLI doctor 使用快照中的实际 Wi-Fi 接口和自动发现的工具路径，不再固定
+  wlan0 或 /usr/sbin/wpa_cli。
+- XFCE 插件密码对话框不再回退写死 wlan0；无 Wi-Fi 接口时直接返回。

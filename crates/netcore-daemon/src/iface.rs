@@ -1,12 +1,13 @@
 //! Interface enumeration through getifaddrs(3), including FreeBSD if_data.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, HashSet};
 use std::ffi::CStr;
 use std::fmt::Write as _;
 use std::net::{Ipv4Addr, Ipv6Addr};
 
-use anyhow::{Context, Result};
+use anyhow::{Context, Result, bail};
 use netcore_common::{DeviceKind, DeviceState, NetworkDevice};
+use tokio::process::Command;
 
 /// Raw facts about one interface before manager policy is applied.
 #[derive(Debug, Clone, Default)]
@@ -18,6 +19,8 @@ pub struct InterfaceInfo {
     pub ipv4: Vec<String>,
     pub ipv6: Vec<String>,
     pub carrier: bool,
+    /// True when ifconfig reports this interface in the FreeBSD wlan group.
+    pub wireless: bool,
 }
 
 impl InterfaceInfo {
@@ -35,7 +38,7 @@ impl InterfaceInfo {
     pub fn kind(&self) -> DeviceKind {
         if self.is_loopback() {
             DeviceKind::Loopback
-        } else if self.ifname.starts_with("wlan") {
+        } else if self.wireless {
             DeviceKind::Wifi
         } else if self.ifname.is_empty() {
             DeviceKind::Other
@@ -43,6 +46,37 @@ impl InterfaceInfo {
             DeviceKind::Ethernet
         }
     }
+}
+
+/// Discover wireless interfaces through the FreeBSD interface group rather
+/// than assuming the traditional wlanN naming scheme. Renamed interfaces keep
+/// their wlan group membership.
+pub async fn wireless_interfaces(ifconfig: &std::path::Path) -> Result<HashSet<String>> {
+    let output = Command::new(ifconfig)
+        .args(["-g", "wlan"])
+        .env("LC_ALL", "C")
+        .output()
+        .await
+        .with_context(|| format!("无法执行 {}", ifconfig.display()))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_lower = stderr.to_ascii_lowercase();
+        // ifconfig exits non-zero for an unknown/empty group on some builds.
+        if stderr_lower.contains("does not exist")
+            || stderr_lower.contains("no such")
+            || stderr_lower.contains("not found")
+            || stderr.trim().is_empty()
+        {
+            return Ok(HashSet::new());
+        }
+        bail!("ifconfig -g wlan 失败: {}", stderr.trim());
+    }
+    Ok(String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(ToOwned::to_owned)
+        .collect())
 }
 
 /// Interfaces that are kernel plumbing rather than user-facing links.
@@ -228,6 +262,7 @@ pub fn to_device(info: &InterfaceInfo, state: DeviceState) -> NetworkDevice {
         ipv4: info.ipv4.clone(),
         ipv6: info.ipv6.clone(),
         ssid: None,
+        ssid_hex: None,
         networks: Vec::new(),
         last_error: None,
     }
@@ -244,13 +279,15 @@ mod tests {
     }
 
     #[test]
-    fn classifies_interfaces() {
+    fn classifies_interfaces_without_name_assumptions() {
         let mut info = InterfaceInfo {
-            ifname: "wlan0".to_owned(),
+            ifname: "radio0".to_owned(),
+            wireless: true,
             ..InterfaceInfo::default()
         };
         assert_eq!(info.kind(), DeviceKind::Wifi);
         info.ifname = "ue0".to_owned();
+        info.wireless = false;
         assert_eq!(info.kind(), DeviceKind::Ethernet);
         info.flags = libc::IFF_LOOPBACK as u32;
         assert_eq!(info.kind(), DeviceKind::Loopback);

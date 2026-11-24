@@ -40,7 +40,8 @@ netcore 支持两种后端，并在 auto 模式下探测：
    通过 GetInterface(ifname) 获取动态 Interface 对象路径，再调用
    Scan/AddNetwork/SelectNetwork/Disconnect 并读取 State、BSSs、CurrentBSS。
    不使用固定接口对象路径。
-2. 控制套接字：/var/run/wpa_supplicant/<ifname>。FreeBSD ports 的
+2. 控制套接字：自动查找包含控制 socket 的 /var/run/wpa_supplicant* 目录
+   （也可用 --wpa-ctrl-dir 或 WPA_CTRL_DIR 指定）。FreeBSD ports 的
    wpa_supplicant 经常没有编译 D-Bus 支持，此时 netcore 调用 wpa_cli 并解析
    status/scan_results。
 
@@ -54,8 +55,10 @@ netcore 支持两种后端，并在 auto 模式下探测：
 注意：真实的 wpa_supplicant D-Bus API 没有通用的 Interface.Connect；连接是
 AddNetwork + SelectNetwork 后等待 State=completed。netcore 按实际 API 实现。
 
-扫描结果的 SSID 在 ctrl 后端是 wpa_cli 的转义形式（\xNN），代码会解码为
-UTF-8 并按 SSID 去重，保留最强 BSS。
+扫描结果的 SSID 在 ctrl 后端是 wpa_cli 的转义形式（\xNN）。解析器按字节
+解码，不先做 UTF-8 lossy 转换，也不 trim SSID；合法 UTF-8（包括中文）原样
+显示，非 UTF-8 字节以 \xNN 显示并保留 ssid_hex。按原始字节去重，保留最强
+BSS。
 
 ## DHCP
 
@@ -67,7 +70,7 @@ dhclient(8) 由 netcore 用 -d（前台）启动，以便：
 
 命令形如：
 
-    /sbin/dhclient -d -q wlan0
+    dhclient -d -q <ifname>    # 实际路径由工具发现/--dhclient 决定
 
 进程放入独立进程组；停止时先 SIGTERM 整个组，5 秒后 SIGKILL。若检测到
 /var/run/dhclient/dhclient.<ifname>.pid 指向仍存活的外部 dhclient，则不启动
@@ -132,3 +135,13 @@ netcore.rc 使用 daemon(8) 托管：
 - libxfce4panel 2.0、GTK3 开发文件（XFCE 插件）
 - dbus、wpa_supplicant、dhclient（系统命令）
 - polkit（可选，推荐）
+## 接口、工具与 SSID 发现
+
+- 无线接口通过实际的 `ifconfig -g wlan` 组判断，不依赖 wlanN 名称；允许
+  重命名接口。
+- `--wpa-cli`、`--ifconfig`、`--dhclient` 未指定时依次检查环境变量、PATH
+  和常见 FreeBSD 目录，不要求工具在 /usr/local 或 /usr/sbin。
+- 控制目录查找实际 socket，不假定只有一个固定目录。
+- SSID 是 32 字节以内的任意八位组；`ssid` 是显示文本，`ssid_hex` 是精确
+  字节。中文 UTF-8 在 C locale 下仍然还原为中文。
+- 详细实现与验证见 docs/authenticity.md。

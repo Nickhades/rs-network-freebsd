@@ -5,11 +5,12 @@
 //! dhclient or wpa_supplicant mutations. Every successful refresh emits one
 //! deduplicated snapshot, which the D-Bus service fans out as a signal.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
+use netcore_common::ssid::same_ssid;
 use netcore_common::{
     ActionResult, Connectivity, DeviceKind, DeviceState, ErrorCode, ManagerSnapshot, ManagerState,
     NetworkDevice, PROTOCOL_VERSION, ScanResult, Security, VERSION, WifiNetwork,
@@ -59,6 +60,7 @@ struct Inner {
     events: broadcast::Sender<ManagerEvent>,
     last_key: std::sync::Mutex<Option<String>>,
     hostname: String,
+    wireless_ifnames: std::sync::RwLock<HashSet<String>>,
 }
 
 /// Cheaply cloneable manager handle.
@@ -71,9 +73,9 @@ impl Manager {
     pub async fn new(config: &Config, wifi: WifiService) -> Self {
         let (events, _) = broadcast::channel(128);
         let inner = Arc::new(Inner {
-            ifconfig: config.ifconfig.clone(),
+            ifconfig: config.ifconfig.clone().expect("ifconfig resolved"),
             dhcp: DhcpManager::new(
-                config.dhclient.clone(),
+                config.dhclient.clone().expect("dhclient resolved"),
                 Duration::from_secs(config.dhcp_timeout),
                 !config.no_dhcp,
             ),
@@ -90,6 +92,7 @@ impl Manager {
             events,
             last_key: std::sync::Mutex::new(None),
             hostname: hostname(),
+            wireless_ifnames: std::sync::RwLock::new(HashSet::new()),
         });
         let manager = Self { inner };
         manager.refresh().await;
@@ -119,6 +122,22 @@ impl Manager {
                 Vec::new()
             }
         };
+        let wireless = match iface::wireless_interfaces(&self.inner.ifconfig).await {
+            Ok(names) => names,
+            Err(error) => {
+                tracing::warn!(%error, "读取无线接口分组失败；沿用上一次结果");
+                self.inner
+                    .wireless_ifnames
+                    .read()
+                    .unwrap_or_else(std::sync::PoisonError::into_inner)
+                    .clone()
+            }
+        };
+        *self
+            .inner
+            .wireless_ifnames
+            .write()
+            .unwrap_or_else(std::sync::PoisonError::into_inner) = wireless.clone();
         let networks = self.inner.networks.read().await.clone();
         let op_state = self.inner.op_state.read().await.clone();
         let errors = self.inner.last_errors.read().await.clone();
@@ -126,8 +145,9 @@ impl Manager {
         let wifi_enabled = self.inner.wifi_enabled.load(Ordering::SeqCst);
 
         let mut devices = Vec::new();
-        for info in interfaces {
-            if info.is_loopback() || is_virtual(&info.ifname) {
+        for mut info in interfaces {
+            info.wireless = wireless.contains(&info.ifname);
+            if info.is_loopback() || (is_virtual(&info.ifname) && !info.wireless) {
                 continue;
             }
             let kind = info.kind();
@@ -158,6 +178,7 @@ impl Manager {
                 }
                 if let Some(status) = &wifi_status {
                     device.ssid = status.ssid.clone();
+                    device.ssid_hex = status.ssid_hex.clone();
                     if status.connected {
                         device.state = DeviceState::Connected;
                     }
@@ -166,7 +187,12 @@ impl Manager {
                 if let Some(status) = &wifi_status {
                     for network in &mut device.networks {
                         network.connected = status.connected
-                            && status.ssid.as_deref() == Some(network.ssid.as_str());
+                            && same_ssid(
+                                status.ssid.as_deref().unwrap_or_default(),
+                                status.ssid_hex.as_deref(),
+                                &network.ssid,
+                                network.ssid_hex.as_deref(),
+                            );
                     }
                 }
                 device.networks = deduplicate(device.networks);
@@ -187,9 +213,11 @@ impl Manager {
             if kind == DeviceKind::Wifi && !wifi_enabled {
                 device.state = DeviceState::Unavailable;
                 device.ssid = None;
+                device.ssid_hex = None;
             } else if kind == DeviceKind::Wifi && !info.enabled() {
                 device.state = DeviceState::Disconnected;
                 device.ssid = None;
+                device.ssid_hex = None;
             }
 
             if let Some(error) = errors.get(&info.ifname) {
@@ -314,8 +342,13 @@ impl Manager {
             .map_err(ManagerError::from)?;
         if let Some(status) = status {
             for network in &mut networks {
-                network.connected =
-                    status.connected && status.ssid.as_deref() == Some(network.ssid.as_str());
+                network.connected = status.connected
+                    && same_ssid(
+                        status.ssid.as_deref().unwrap_or_default(),
+                        status.ssid_hex.as_deref(),
+                        &network.ssid,
+                        network.ssid_hex.as_deref(),
+                    );
             }
         }
         let networks = deduplicate(networks);
@@ -570,10 +603,20 @@ impl Manager {
         if was_enabled == enabled {
             return Ok(());
         }
+        let wireless = self
+            .inner
+            .wireless_ifnames
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         let infos: Vec<InterfaceInfo> = system::interfaces()
             .map_err(ManagerError::from)?
             .into_iter()
-            .filter(|info| info.kind() == DeviceKind::Wifi && !is_virtual(&info.ifname))
+            .map(|mut info| {
+                info.wireless = wireless.contains(&info.ifname);
+                info
+            })
+            .filter(|info| info.kind() == DeviceKind::Wifi)
             .collect();
         let mut first_error: Option<ManagerError> = None;
         for info in &infos {
@@ -665,9 +708,19 @@ impl Manager {
     }
 
     fn lookup_interface(&self, ifname: &str) -> Result<InterfaceInfo, ManagerError> {
+        let wireless = self
+            .inner
+            .wireless_ifnames
+            .read()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .clone();
         system::interfaces()
             .map_err(ManagerError::from)?
             .into_iter()
+            .map(|mut info| {
+                info.wireless = wireless.contains(&info.ifname);
+                info
+            })
             .find(|info| info.ifname == ifname)
             .ok_or_else(|| ManagerError::not_found(format!("找不到接口 {ifname}")))
     }

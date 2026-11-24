@@ -12,6 +12,7 @@ mod mock;
 use std::path::PathBuf;
 
 use anyhow::{Result, bail};
+use netcore_common::ssid::same_ssid;
 use netcore_common::{Security, WifiNetwork};
 
 use crate::config::WpaChoice;
@@ -22,6 +23,7 @@ pub use mock::MockWifi;
 pub struct WifiStatus {
     pub connected: bool,
     pub ssid: Option<String>,
+    pub ssid_hex: Option<String>,
     pub bssid: Option<String>,
     pub state: String,
 }
@@ -32,6 +34,7 @@ impl WifiStatus {
         Self {
             connected: false,
             ssid: None,
+            ssid_hex: None,
             bssid: None,
             state: "disconnected".to_owned(),
         }
@@ -68,9 +71,17 @@ impl WifiService {
             WpaChoice::Mock => Self {
                 backend: Backend::Mock(MockWifi::new()),
             },
-            WpaChoice::Ctrl => Self {
-                backend: Backend::Ctrl(ctrl),
-            },
+            WpaChoice::Ctrl => {
+                if ctrl.usable() {
+                    Self {
+                        backend: Backend::Ctrl(ctrl),
+                    }
+                } else {
+                    Self {
+                        backend: Backend::Unavailable("wpa_cli 或控制套接字目录不可用".to_owned()),
+                    }
+                }
+            }
             WpaChoice::Dbus => match dbus::DbusWifi::new().await {
                 Ok(backend) => Self {
                     backend: Backend::Dbus(backend),
@@ -206,18 +217,22 @@ pub fn security_from_flags(flags: &str) -> Security {
 }
 
 /// Decode the backslash escapes wpa_cli uses for non-printable SSIDs.
+///
+/// This operates on bytes so an SSID never passes through a lossy UTF-8
+/// conversion before it is modelled. The returned bytes are the exact SSID
+/// octets (including NUL, tabs and non-UTF-8 sequences).
 #[must_use]
-pub fn unescape_wpa(input: &str) -> String {
-    let bytes = input.as_bytes();
-    let mut output = Vec::with_capacity(bytes.len());
+pub fn unescape_wpa_bytes(input: &[u8]) -> Vec<u8> {
+    let mut output = Vec::with_capacity(input.len());
     let mut index = 0;
-    while index < bytes.len() {
-        if bytes[index] == b'\\' && index + 1 < bytes.len() {
-            match bytes[index + 1] {
-                b'x' | b'X' if index + 3 < bytes.len() => {
-                    let hex = &input[index + 2..index + 4];
-                    if let Ok(value) = u8::from_str_radix(hex, 16) {
-                        output.push(value);
+    while index < input.len() {
+        if input[index] == b'\\' && index + 1 < input.len() {
+            match input[index + 1] {
+                b'x' | b'X' if index + 3 < input.len() => {
+                    let high = hex_value(input[index + 2]);
+                    let low = hex_value(input[index + 3]);
+                    if let (Some(high), Some(low)) = (high, low) {
+                        output.push((high << 4) | low);
                         index += 4;
                         continue;
                     }
@@ -254,12 +269,26 @@ pub fn unescape_wpa(input: &str) -> String {
                 }
             }
         }
-        output.push(bytes[index]);
+        output.push(input[index]);
         index += 1;
     }
-    String::from_utf8_lossy(&output)
-        .trim_end_matches('\0')
-        .to_owned()
+    output
+}
+
+fn hex_value(byte: u8) -> Option<u8> {
+    match byte {
+        b'0'..=b'9' => Some(byte - b'0'),
+        b'a'..=b'f' => Some(byte - b'a' + 10),
+        b'A'..=b'F' => Some(byte - b'A' + 10),
+        _ => None,
+    }
+}
+
+/// Display-oriented wrapper used by tests.
+#[cfg(test)]
+#[must_use]
+pub fn unescape_wpa(input: &str) -> String {
+    netcore_common::ssid::display_and_hex(&unescape_wpa_bytes(input.as_bytes())).0
 }
 
 /// Escape a value for the wpa_supplicant control protocol. The caller adds
@@ -292,7 +321,14 @@ pub fn deduplicate(mut networks: Vec<WifiNetwork>) -> Vec<WifiNetwork> {
     });
     let mut result: Vec<WifiNetwork> = Vec::new();
     for network in networks {
-        if let Some(existing) = result.iter_mut().find(|item| item.ssid == network.ssid) {
+        if let Some(existing) = result.iter_mut().find(|item| {
+            same_ssid(
+                &item.ssid,
+                item.ssid_hex.as_deref(),
+                &network.ssid,
+                network.ssid_hex.as_deref(),
+            )
+        }) {
             existing.connected |= network.connected;
             if network.signal > existing.signal {
                 existing.signal = network.signal;
@@ -312,8 +348,10 @@ mod tests {
     use super::*;
 
     fn network(ssid: &str, signal: i32) -> WifiNetwork {
+        let (display, hex) = netcore_common::ssid::display_and_hex(ssid.as_bytes());
         WifiNetwork {
-            ssid: ssid.to_owned(),
+            ssid: display,
+            ssid_hex: hex,
             bssid: None,
             signal,
             frequency: 2412,
@@ -346,6 +384,10 @@ mod tests {
         assert_eq!(unescape_wpa("\\xe4\\xba\\x91\\xe6\\xb6\\xa7"), "云涧");
         assert_eq!(unescape_wpa("hello"), "hello");
         assert_eq!(unescape_wpa("a\\tb"), "a\tb");
+        assert_eq!(
+            unescape_wpa_bytes(b"\\xff\\x00\\x61"),
+            vec![0xff, 0x00, b'a']
+        );
     }
 
     #[test]
@@ -353,6 +395,7 @@ mod tests {
         assert_eq!(escape_wpa_value("a\"b"), "a\\\"b");
         assert_eq!(escape_wpa_value("a\\b"), "a\\\\b");
         assert_eq!(escape_wpa_value("a\nb"), "a\\nb");
+        assert_eq!(escape_wpa_value("云涧"), "\\xe4\\xba\\x91\\xe6\\xb6\\xa7");
     }
 
     #[test]
