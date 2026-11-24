@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.3.3
+
+- rc.d post-start 在 daemon(8) 未留下 pidfile 时，用 pgrep 查找
+  netcore-daemon 并补写 /var/run/netcore.pid，修复 service status 永远
+  显示未运行的问题。
+
 ## v0.3.2
 
 - 修复 rc.d 脚本 start_postcmd 指向不存在的 netcore_postcmd，导致

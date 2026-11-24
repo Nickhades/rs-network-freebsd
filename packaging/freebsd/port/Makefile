@@ -5,7 +5,7 @@
 # GH_ACCOUNT/GH_PROJECT values (or set MASTER_SITES) before building.
 
 PORTNAME=	netcore
-DISTVERSION=	0.3.2
+DISTVERSION=	0.3.3
 CATEGORIES=	net-mgmt
 MASTER_SITES=	# local submission / GH
 PKGNAMESUFFIX=	-network-manager

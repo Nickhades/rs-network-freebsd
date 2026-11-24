@@ -46,6 +46,12 @@ netcore_prestart()
 # daemon(8) creates the pidfile 0600; make status work for wheel users.
 netcore_poststart()
 {
+    # daemon(8) normally writes the child pidfile.  Keep management working
+    # even on systems where the supervisor was reaped early.
+    if [ ! -s "${pidfile}" ]; then
+        pid=$(/usr/bin/pgrep -x netcore-daemon | head -n 1)
+        [ -n "$pid" ] && printf "%s\n" "$pid" > "${pidfile}"
+    fi
     [ -f "${pidfile}" ] && chmod 0644 "${pidfile}" 2>/dev/null
     return 0
 }
