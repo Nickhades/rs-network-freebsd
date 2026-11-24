@@ -31,7 +31,7 @@ port/ 下的 Makefile 已包含 Cargo.lock 生成的 CARGO_CRATES 列表。它�
 ## 安装后的服务
 
     sysrc netcore_enable=YES
-    service dbus restart
+    reboot   # 不要重启 D-Bus 服务，会终止桌面会话
     service netcore start
 
 D-Bus 服务文件按 /usr/local 前缀编写；变更 PREFIX 时要同步修改 Exec 路径。

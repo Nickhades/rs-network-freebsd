@@ -172,16 +172,21 @@ plugins/ 与所需 target 产物一同打包。
 ## 安装后
 
     sysrc netcore_enable=YES
-    service dbus restart
+    reboot
+
+    # 重启后按需启动并检查：
     service netcore start
     service netcore status
     netcore status
+
+为什么不能重启系统 D-Bus 服务：这会杀死依赖它的桌面会话和图形程序，通常会导致
+当前桌面不可用。安装/更新 D-Bus policy 后请直接重启系统。
 
 如果只是想更新二进制而不重启服务，替换文件后执行：
 
     service netcore restart
 
-D-Bus policy 文件变更后需要重启 dbus 或系统。
+不要用重启 dbus 的方式加载 policy。
 
 ## 故障排查
 

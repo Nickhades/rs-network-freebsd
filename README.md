@@ -98,10 +98,15 @@ SSID 真实性与跨系统设备发现见 [docs/authenticity.md](docs/authentici
 安装后：
 
     sysrc netcore_enable=YES
-    service dbus restart
+    reboot
+
+    # 重启后按需启动并检查：
     service netcore start
     service netcore status
     netcore status
+
+不要重启系统 D-Bus 服务：它可能终止当前桌面会话。
+
 
 暂存或无人值守安装时请显式选择桌面：
 
